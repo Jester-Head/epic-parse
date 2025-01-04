@@ -1,0 +1,5 @@
+Crawler
+.vscode
+__pycache__
+config.py
+requirements.in
