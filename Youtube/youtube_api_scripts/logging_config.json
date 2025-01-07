@@ -19,8 +19,8 @@
             "formatter": "standard",
             "filename": "logs/youtube.log",
             "mode": "a",
-            "maxBytes": 1048576, 
-            "backupCount": 5,
+            "maxBytes": 1048576,
+            "backupCount": 3,
             "encoding": "utf-8"
         }
     },

@@ -3,3 +3,7 @@ Crawler
 __pycache__
 config.py
 requirements.in
+tests
+.pytest_cache
+logs
+video_metadata_cache.json
