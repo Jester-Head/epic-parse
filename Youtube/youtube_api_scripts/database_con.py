@@ -7,7 +7,7 @@ from config import MONGO_URI, MONGO_DB, MONGO_COLL
 
 
 class DatabaseConnection:
-    def __init__(self, mongo_uri=None, mongo_db=None, mongo_coll=None):
+    def __init__(self, mongo_uri=MONGO_URI, mongo_db=MONGO_DB, mongo_coll=MONGO_COLL):
         if mongo_uri is None:
             raise ValueError("MONGO_URI must be provided")
         if mongo_db is None:
@@ -57,9 +57,6 @@ class DatabaseConnection:
             self.progress_collection.create_index(
                 [("videoId", pymongo.ASCENDING)], unique=True
             )
-            self.progress_collection.create_index(
-                [("videoId", pymongo.ASCENDING)], unique=True)
-
             self.logger.info(
                 "Database connection established and indexes created.")
         except pymongo.errors.PyMongoError as e:
