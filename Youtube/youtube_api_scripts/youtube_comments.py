@@ -10,7 +10,7 @@ import logging.config
 from datetime import datetime
 
 # Config variables and database connection
-from config import API_KEY, CHANNELS, CUTOFF_DATE, KEYWORDS,LOG_CONFIG_PATH
+from config import API_KEY, CHANNELS, CUTOFF_DATE, KEYWORDS, LOG_CONFIG_PATH
 from database_con import DatabaseConnection
 
 # -----------------Logging Setup-----------------
@@ -168,7 +168,8 @@ def get_most_recent_comment_date(db, channel_id, video_id, initial_fetch_date):
     """
     most_recent_comment = db.get_most_recent_comment(channel_id, video_id)
     return (
-        parse(most_recent_comment["snippet"]["topLevelComment"]["snippet"]["updatedAt"])
+        parse(most_recent_comment["snippet"]
+              ["topLevelComment"]["snippet"]["updatedAt"])
         if most_recent_comment
         else parse(initial_fetch_date)
     )
@@ -376,24 +377,8 @@ def get_top_channels(youtube, channels=CHANNELS, n=3):
 
 def get_all_channel_comments(youtube, channel_id, db, max_results=100):
     """
-    Fetches all comment threads for a given YouTube channel ID, includes video titles and channel name,
+    Fetches all unique comment threads for a given YouTube channel ID, includes video titles and channel name,
     and stores them in a database.
-
-    Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        channel_id (str): The ID of the YouTube channel to fetch comments from.
-        db (DatabaseConnection): The database connection instance.
-        max_results (int, optional): The maximum number of results to retrieve per API call. Defaults to 100.
-
-    Returns:
-        None
-
-    Raises:
-        googleapiclient.errors.HttpError: If an error occurs while making the API request.
-
-    Logs:
-        Info: When fetching comment threads for the specified channel ID.
-        Error: If an error occurs while processing the channel.
     """
     logger.info(f"Fetching all comment threads for channel ID: {channel_id}")
 
@@ -414,11 +399,12 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
         channel_name = None
 
     page_token = None
+    processed_videos = set()  # Track processed video IDs
 
     while True:
         try:
             request = youtube.commentThreads().list(
-                part="snippet,replies",
+                part="snippet",
                 allThreadsRelatedToChannelId=channel_id,
                 maxResults=max_results,
                 order="time",
@@ -432,6 +418,13 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
             if comments:
                 for comment in comments:
                     video_id = comment["snippet"]["videoId"]
+
+                    if video_id in processed_videos:
+                        logger.debug(
+                            f"Already processed video ID: {video_id}. Skipping.")
+                        continue  # Skip if already processed
+
+                    processed_videos.add(video_id)  # Mark as processed
 
                     # Fetch comments with resume capability (includes video metadata)
                     result = fetch_comments_with_resume(
@@ -455,6 +448,7 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
             )
             break
 
+
 # -----------------By Playlists-----------------
 
 
@@ -472,7 +466,7 @@ def generate_playlists(youtube, channel_id, keywords=KEYWORDS, max_results=10):
         tuple: A tuple containing the playlist ID and playlist title for each matching playlist.
     """
     if not isinstance(keywords, list):
-        keywords = [keywords]
+        keywords = list(keywords)
 
     page_token = None
     while True:
@@ -501,6 +495,50 @@ def generate_playlists(youtube, channel_id, keywords=KEYWORDS, max_results=10):
             logger.error(
                 f"An error occurred while generating playlists for channel {channel_id}: {e}")
             break
+
+
+def generate_videos_by_search(youtube, channel_id, search_keyword, max_results=50):
+    """
+    Generator to yield video IDs by searching with the given keyword within the channel.
+
+    Args:
+        youtube (googleapiclient.discovery.Resource): The YouTube API client.
+        channel_id (str): The ID of the YouTube channel.
+        search_keyword (str): The keyword to search in video titles.
+        max_results (int, optional): The maximum number of results per API call. Defaults to 50.
+
+    Yields:
+        str: Video ID of each matching video.
+    """
+    page_token = None
+    while True:
+        try:
+            request = youtube.search().list(
+                part="id",
+                channelId=channel_id,
+                q=search_keyword,
+                type="video",
+                maxResults=max_results,
+                order="date",
+                pageToken=page_token
+            )
+            response = retry_request(request)
+            if not response:
+                break
+
+            for item in response.get("items", []):
+                video_id = item["id"]["videoId"]
+                yield video_id
+
+            page_token = response.get('nextPageToken')
+            if not page_token:
+                break
+
+        except HttpError as e:
+            logger.error(
+                f"Error searching videos for keyword '{search_keyword}' in channel {channel_id}: {e}")
+            break
+
 
 
 def generate_videos(youtube, playlist_id, max_results=50):
@@ -546,34 +584,53 @@ def generate_videos(youtube, playlist_id, max_results=50):
 
 
 def get_comments_by_playlist(youtube, channel_id, db, keywords=KEYWORDS, max_results=5):
-    """
-    Fetches comments from YouTube videos in playlists that match specified keywords.
-
-    Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        channel_id (str): The ID of the YouTube channel to search for playlists.
-        db (DatabaseConnection): The database connection instance.
-        keywords (list or str, optional): A list of keywords to filter playlists. Defaults to KEYWORDS.
-        max_results (int, optional): The maximum number of playlists to retrieve per API call. Defaults to 5.
-
-    Raises:
-        googleapiclient.errors.HttpError: If an error occurs while making API requests.
-
-    Returns:
-        None
-    """
     if not isinstance(keywords, list):
-        keywords = [keywords]
+        keywords = list(keywords)
+
+    processed_videos = set()  # Track processed video IDs
 
     try:
-        playlists = generate_playlists(
+        playlists = list(generate_playlists(
             youtube, channel_id, keywords, max_results=max_results
-        )
+        ))
+
+        if not playlists:
+            logger.info(
+                f"No playlists found for channel ID {channel_id} with keywords {keywords}. Searching videos with the same keywords.")
+            for keyword in keywords:
+                videos = generate_videos_by_search(
+                    youtube, channel_id, keyword, max_results=max_results)
+                for video_id in videos:
+                    if video_id in processed_videos:
+                        logger.debug(
+                            f"Already processed video ID: {video_id}. Skipping.")
+                        continue
+                    processed_videos.add(video_id)
+
+                    logger.info(f"Fetching comments for video: {video_id}")
+                    result = fetch_comments_with_resume(
+                        youtube,
+                        video_id,
+                        channel_id,
+                        db,
+                        max_results=100,
+                        initial_fetch_date=CUTOFF_DATE
+                    )
+                    if result and result["comments"]:
+                        db.insert_comments(result["comments"])
+            return
+
         for playlist_id, playlist_title in playlists:
             logger.info(
                 f"Processing Playlist ID: {playlist_id}, Title: {playlist_title}")
             videos = generate_videos(youtube, playlist_id)
             for video_id in videos:
+                if video_id in processed_videos:
+                    logger.debug(
+                        f"Already processed video ID: {video_id}. Skipping.")
+                    continue
+                processed_videos.add(video_id)
+
                 logger.info(f"Fetching comments for video: {video_id}")
                 result = fetch_comments_with_resume(
                     youtube,
@@ -587,8 +644,10 @@ def get_comments_by_playlist(youtube, channel_id, db, keywords=KEYWORDS, max_res
                     db.insert_comments(result["comments"])
     except HttpError as e:
         logger.error(
-            f"An error occurred processing channel {channel_id} with keywords '{keywords}': {e}"
-        )
+            f"An error occurred processing channel {channel_id} with keywords '{keywords}': {e}")
+
+
+
 
 # -----------------By Videos-----------------
 
@@ -608,7 +667,7 @@ def filter_videos(youtube, channel_id, db, keywords=KEYWORDS, max_results=100):
         None
     """
     if not isinstance(keywords, list):
-        keywords = [keywords]
+        keywords = list(keywords)
 
     for keyword in keywords:
         logger.info(
@@ -620,7 +679,7 @@ def filter_videos(youtube, channel_id, db, keywords=KEYWORDS, max_results=100):
                 request = youtube.search().list(
                     part="snippet",
                     channelId=channel_id,
-                    q=keyword,  
+                    q=keyword,
                     type="video",
                     maxResults=max_results,
                     order="date",
@@ -670,7 +729,7 @@ def process_channels(youtube, db, channels=CHANNELS, keywords=KEYWORDS, limit_ch
         None
     """
     if not isinstance(keywords, list):
-        keywords = [keywords]
+        keywords = list(keywords)
     if limit_channels:
         # Limit the channels to process based on the top subscriber count
         top_channels = get_top_channels(youtube, channels, n=limit_channels)
@@ -699,23 +758,17 @@ def process_channels(youtube, db, channels=CHANNELS, keywords=KEYWORDS, limit_ch
 # -----------------Main Execution-----------------
 
 
-def main():
-    """
-    Main function to execute the YouTube comments fetching process.
-
-    This function initializes the YouTube API client, establishes a database connection,
-    and processes YouTube channels to fetch comments based on specified keywords.
-
-    Args:
-        None
-
-    Returns:
-        None
-    """
-    youtube = build_youtube_service()
-    with DatabaseConnection() as db:
-        process_channels(youtube, db, limit_channels=1)
-
 
 if __name__ == "__main__":
-    main()
+    # Example usage to fetch comments for a specific channel
+    channel = CHANNELS['Asmongold']['channel_id']
+    youtube_service = build_youtube_service()
+    with DatabaseConnection() as db:
+        get_comments_by_playlist(
+            youtube_service,
+            channel,
+            db,
+            keywords=KEYWORDS,
+            max_results=10
+        )
+    
