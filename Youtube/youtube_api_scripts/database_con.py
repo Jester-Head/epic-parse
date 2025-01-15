@@ -1,77 +1,175 @@
+# database_con.py
+
 import logging
-import logging.config
 import pymongo
 from datetime import datetime
-# Load your config variables for DB
 from config import MONGO_URI, MONGO_DB, MONGO_COLL
 
 
 class DatabaseConnection:
     def __init__(self, mongo_uri=MONGO_URI, mongo_db=MONGO_DB, mongo_coll=MONGO_COLL):
-        if mongo_uri is None:
+        """
+        Initializes the DatabaseConnection with MongoDB URI, database name, and collection name.
+
+        Args:
+            mongo_uri (str): MongoDB connection URI.
+            mongo_db (str): Name of the MongoDB database.
+            mongo_coll (str): Name of the MongoDB collection for comments.
+        """
+        if not mongo_uri:
             raise ValueError("MONGO_URI must be provided")
-        if mongo_db is None:
+        if not mongo_db:
             raise ValueError("MONGO_DB must be provided")
-        if mongo_coll is None:
+        if not mongo_coll:
             raise ValueError("MONGO_COLL must be provided")
+
         self.mongo_uri = mongo_uri
         self.mongo_db = mongo_db
         self.mongo_coll = mongo_coll
         self.client = None
         self.db = None
         self.collection = None
-        self.progress_collection = None  # New collection for progress
+        self.progress_collection = None  # Collection for tracking progress
         self.logger = logging.getLogger(__name__)
-        self.client = pymongo.MongoClient(
-            self.mongo_uri, serverSelectionTimeoutMS=5000)
+        self.connect()
 
-    def open_connection(self):
+    def connect(self):
         """
         Establishes a connection to the MongoDB database and sets up the necessary indexes.
         """
         try:
-            self.client = pymongo.MongoClient(self.mongo_uri)
+            self.client = pymongo.MongoClient(
+                self.mongo_uri, serverSelectionTimeoutMS=5000)
             self.db = self.client[self.mongo_db]
             self.collection = self.db[self.mongo_coll]
-            # Set up the progress collection
+            # Collection for progress tracking
             self.progress_collection = self.db['progress']
 
-            # Ensure indexes on comments collection
-            # Index on channelId, likeCount, and updatedAt to optimize queries for comments
-            # sorted by like count within a channel and updated time.
-            self.collection.create_index(
-                [("snippet.channelId", pymongo.ASCENDING),
-                 ("snippet.likeCount", pymongo.ASCENDING),
-                 ("snippet.updatedAt", pymongo.ASCENDING)]
-            )
-            self.collection.create_index(
-                [
-                    ("snippet.channelId", pymongo.ASCENDING),
-                    ("snippet.videoId", pymongo.ASCENDING),
-                    ("snippet.updatedAt", pymongo.DESCENDING),
-                ]
-            )
-            self.collection.create_index(
-                [("id", pymongo.ASCENDING)], unique=True)
-            # Indexing videoId in progress_collection to ensure unique entries for each video
-            self.progress_collection.create_index(
-                [("videoId", pymongo.ASCENDING)], unique=True
-            )
+            # Define desired indexes with explicit names to avoid conflicts
+            desired_indexes = [
+                # Indexes for comments collection
+                {
+                    "collection": self.collection,
+                    "keys": [("channel_id", pymongo.ASCENDING),
+                             ("like_count", pymongo.ASCENDING),
+                             ("updated_at", pymongo.ASCENDING)],
+                    "unique": False,
+                    "name": "channel_like_updated_idx"
+                },
+                {
+                    "collection": self.collection,
+                    "keys": [("channel_id", pymongo.ASCENDING),
+                             ("video_id", pymongo.ASCENDING),
+                             ("updated_at", pymongo.DESCENDING)],
+                    "unique": False,
+                    "name": "channel_video_updated_idx"
+                },
+                {
+                    "collection": self.collection,
+                    "keys": [("comment_id", pymongo.ASCENDING)],
+                    "unique": True,
+                    "name": "comment_id_unique_idx"
+                },
+                # Indexes for progress collection
+                {
+                    "collection": self.progress_collection,
+                    "keys": [("video_id", pymongo.ASCENDING)],
+                    "unique": True,
+                    "name": "video_id_unique_idx",
+                    "sparse": True  # Use sparse=True instead of partialFilterExpression
+                }
+            ]
+
+            for index in desired_indexes:
+                self.ensure_index(
+                    collection=index["collection"],
+                    keys=index["keys"],
+                    unique=index["unique"],
+                    name=index["name"],
+                    # Pass sparse if specified
+                    sparse=index.get("sparse", False)
+                )
+
             self.logger.info(
-                "Database connection established and indexes created.")
+                "Database connection established and indexes ensured.")
         except pymongo.errors.PyMongoError as e:
             self.logger.error(
-                f"Error during database connection or index creation: {e}"
-            )
+                f"Error during database connection or index creation: {e}")
+            raise e
+
+    def ensure_index(self, collection, keys, unique, name, sparse=False):
+        """
+        Ensures that an index with the specified keys and options exists in the collection.
+
+        If an index with the same name exists but with different options, it will be dropped and recreated.
+
+        Args:
+            collection (pymongo.collection.Collection): The MongoDB collection.
+            keys (list of tuples): List of (field, direction) tuples.
+            unique (bool): Whether the index should enforce uniqueness.
+            name (str): The name of the index.
+            sparse (bool, optional): Whether the index should be sparse.
+
+        Returns:
+            None
+        """
+        existing_indexes = collection.index_information()
+        if name in existing_indexes:
+            existing_index = existing_indexes[name]
+            # Check if existing index has the same keys and unique option
+            if (existing_index['key'] == keys) and (existing_index.get('unique', False) == unique):
+                if sparse:
+                    # MongoDB does not provide the 'sparse' option in index_information()
+                    self.logger.warning(
+                        f"Cannot verify 'sparse' option for index '{name}'. "
+                        f"Ensure it matches the desired configuration."
+                    )
+                self.logger.debug(
+                    f"Index '{name}' already exists with the desired configuration.")
+                return
+            else:
+                # Drop the conflicting index
+                try:
+                    collection.drop_index(name)
+                    self.logger.info(
+                        f"Dropped existing index '{name}' due to configuration mismatch.")
+                except pymongo.errors.PyMongoError as e:
+                    self.logger.error(f"Failed to drop index '{name}': {e}")
+                    raise e
+
+        # Create the desired index
+        try:
+            if sparse:
+                collection.create_index(
+                    keys, unique=unique, name=name, sparse=True
+                )
+                self.logger.info(
+                    f"Created index '{name}' on fields {keys} with unique={unique} and sparse={sparse}."
+                )
+            else:
+                collection.create_index(keys, unique=unique, name=name)
+                self.logger.info(
+                    f"Created index '{name}' on fields {keys} with unique={unique}."
+                )
+        except pymongo.errors.PyMongoError as e:
+            self.logger.error(f"Failed to create index '{name}': {e}")
+            raise e
 
     def get_most_recent_comment(self, channel_id, video_id):
         """
-        Retrieve the most recent comment for a given channel and video.
+        Retrieves the most recent comment for a given channel and video.
+
+        Args:
+            channel_id (str): The ID of the YouTube channel.
+            video_id (str): The ID of the YouTube video.
+
+        Returns:
+            dict or None: The most recent comment document or None if not found.
         """
         try:
             most_recent_comment = self.collection.find_one(
-                {"snippet.channelId": channel_id, "snippet.videoId": video_id},
-                sort=[("snippet.updatedAt", pymongo.DESCENDING)]
+                {"channel_id": channel_id, "video_id": video_id},
+                sort=[("updated_at", pymongo.DESCENDING)]
             )
             return most_recent_comment
         except pymongo.errors.PyMongoError as e:
@@ -81,27 +179,30 @@ class DatabaseConnection:
     def insert_comment(self, comment):
         """
         Inserts a single comment into the database collection (upsert).
+
+        Args:
+            comment (dict): A dictionary containing comment data.
+
+        Returns:
+            None
         """
         try:
-            if "id" not in comment:
+            if "comment_id" not in comment:
                 self.logger.warning(
-                    "Comment is missing a unique 'id'; skipping insert."
-                )
+                    "Comment is missing a unique 'comment_id'; skipping insert.")
                 return
 
             result = self.collection.update_one(
-                {"id": comment["id"]},
+                {"comment_id": comment["comment_id"]},
                 {"$setOnInsert": comment},
                 upsert=True
             )
             if result.upserted_id is not None:
                 self.logger.info(
-                    f"Comment {comment['id']} inserted successfully."
-                )
+                    f"Comment {comment['comment_id']} inserted successfully.")
             else:
                 self.logger.debug(
-                    f"No new comment inserted (duplicate or older). ID: {comment['id']}"
-                )
+                    f"No new comment inserted (duplicate or older). ID: {comment['comment_id']}")
         except pymongo.errors.DuplicateKeyError:
             self.logger.warning("Duplicate comment not inserted.")
         except pymongo.errors.PyMongoError as e:
@@ -124,13 +225,13 @@ class DatabaseConnection:
         try:
             operations = []
             for comment in comments:
-                if "id" not in comment:
+                if "comment_id" not in comment:
                     self.logger.warning(
-                        "Comment is missing a unique 'id'; skipping insert.")
+                        "Comment is missing a unique 'comment_id'; skipping insert.")
                     continue
                 operations.append(
                     pymongo.UpdateOne(
-                        {"id": comment["id"]},
+                        {"comment_id": comment["comment_id"]},
                         {"$setOnInsert": comment},
                         upsert=True
                     )
@@ -146,17 +247,18 @@ class DatabaseConnection:
 
     def get_progress(self, video_id):
         """
-        Retrieve the last saved page token for a video from the progress collection.
+        Retrieves the last saved page token for a specific video from the progress collection.
 
         Args:
             video_id (str): The ID of the YouTube video.
 
         Returns:
-            str or None: The last page token or None if not found.
+            str or None: The last page token if found; otherwise, None.
         """
         try:
-            progress = self.progress_collection.find_one({"videoId": video_id})
-            return progress.get("lastPageToken", None) if progress else None
+            progress = self.progress_collection.find_one(
+                {"video_id": video_id})
+            return progress.get("last_page_token") if progress else None
         except pymongo.errors.PyMongoError as e:
             self.logger.error(
                 f"Failed to retrieve progress for video ID {video_id}: {e}")
@@ -164,18 +266,21 @@ class DatabaseConnection:
 
     def save_progress(self, video_id, page_token):
         """
-        Save the current page token for a video to the progress collection.
+        Saves the current page token for a specific video to the progress collection.
 
         Args:
             video_id (str): The ID of the YouTube video.
             page_token (str): The current page token.
+
+        Returns:
+            None
         """
         try:
             self.progress_collection.update_one(
-                {"videoId": video_id},
+                {"video_id": video_id},
                 {
                     "$set": {
-                        "lastPageToken": page_token,
+                        "last_page_token": page_token,
                         "timestamp": datetime.utcnow()
                     }
                 },
@@ -199,8 +304,13 @@ class DatabaseConnection:
                 self.logger.error(f"Error closing database connection: {e}")
 
     def __enter__(self):
-        self.open_connection()
+        """
+        Enables usage of the DatabaseConnection class with the 'with' statement.
+        """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Ensures that the MongoDB connection is closed when exiting the 'with' block.
+        """
         self.close_connection()
