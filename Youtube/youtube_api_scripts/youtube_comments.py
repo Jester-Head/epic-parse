@@ -9,7 +9,6 @@ from googleapiclient.errors import HttpError
 import logging
 import logging.config
 import random
-import threading
 from functools import wraps
 
 # Config variables and database connection
@@ -43,33 +42,43 @@ def setup_logging(config_path=LOG_CONFIG_PATH):
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# -----------------Video Metadata Cache-----------------
-# Load cache from file if exists
-CACHE_FILE = 'video_metadata_cache.json'
-if os.path.exists(CACHE_FILE):
-    with open(CACHE_FILE, 'r') as f:
+# -----------------Video and Channel Metadata Cache-----------------
+# Load video metadata cache from file if exists
+VIDEO_CACHE_FILE = 'video_metadata_cache.json'
+if os.path.exists(VIDEO_CACHE_FILE):
+    with open(VIDEO_CACHE_FILE, 'r') as f:
         video_metadata_cache = json.load(f)
-    logger.debug(f"Loaded video metadata cache from {CACHE_FILE}.")
+    logger.debug(f"Loaded video metadata cache from {VIDEO_CACHE_FILE}.")
 else:
     video_metadata_cache = {}
     logger.debug("Initialized empty video metadata cache.")
 
+# Load channel metadata cache from file if exists
+CHANNEL_CACHE_FILE = 'channel_metadata_cache.json'
+if os.path.exists(CHANNEL_CACHE_FILE):
+    with open(CHANNEL_CACHE_FILE, 'r') as f:
+        channel_metadata_cache = json.load(f)
+    logger.debug(f"Loaded channel metadata cache from {CHANNEL_CACHE_FILE}.")
+else:
+    channel_metadata_cache = {}
+    logger.debug("Initialized empty channel metadata cache.")
 
-def save_cache():
-    """
-    Saves the current video metadata cache to a JSON file.
 
-    This function serializes the `video_metadata_cache` dictionary and writes it to
-    the `CACHE_FILE`. It is registered to run upon program exit to ensure that
-    the cache is preserved.
+def save_caches():
     """
-    with open(CACHE_FILE, 'w') as f:
+    Saves the current video and channel metadata caches to JSON files.
+    """
+    with open(VIDEO_CACHE_FILE, 'w') as f:
         json.dump(video_metadata_cache, f)
-    logger.debug(f"Saved video metadata cache to {CACHE_FILE}.")
+    logger.debug(f"Saved video metadata cache to {VIDEO_CACHE_FILE}.")
+
+    with open(CHANNEL_CACHE_FILE, 'w') as f:
+        json.dump(channel_metadata_cache, f)
+    logger.debug(f"Saved channel metadata cache to {CHANNEL_CACHE_FILE}.")
 
 
-# Ensure cache is saved on exit
-atexit.register(save_cache)
+# Ensure caches are saved on exit
+atexit.register(save_caches)
 
 # -----------------API Key Management-----------------
 # Initialize a cycle iterator for API keys
@@ -94,36 +103,6 @@ def build_youtube_service():
 # -----------------Helpers-----------------
 
 
-# Define a semaphore to limit the number of concurrent requests
-MAX_CONCURRENT_REQUESTS = 5
-# Semaphore to limit the number of concurrent requests to avoid hitting API rate limits
-semaphore = threading.Semaphore(MAX_CONCURRENT_REQUESTS)
-
-
-def limit_concurrent_requests(semaphore):
-    """
-    Decorator to limit the number of concurrent executions of a function using a semaphore.
-
-    This decorator ensures that no more than a specified number of threads can execute
-    the decorated function simultaneously. It is useful for controlling the rate of API
-    requests to prevent exceeding rate limits.
-
-    Args:
-        semaphore (threading.Semaphore): A semaphore object to control concurrency.
-
-    Returns:
-        function: The decorated function with concurrency control.
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            with semaphore:
-                return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-@limit_concurrent_requests(semaphore)
 def retry_request(request_func, youtube_service, retries=5, backoff_factor=0.2):
     """
     Executes a YouTube API request with retry logic for handling transient errors.
@@ -170,7 +149,8 @@ def retry_request(request_func, youtube_service, retries=5, backoff_factor=0.2):
             elif e.resp.status == 403:
                 if error_reason in ["quotaExceeded", "dailyLimitExceeded", "userRateLimitExceeded"]:
                     logger.warning(
-                        "Quota-related error encountered. Switching to the next API key.")
+                        "Quota-related error encountered. Switching to the next API key."
+                    )
                     try:
                         youtube_service = build_youtube_service()
                     except HttpError as e:
@@ -187,7 +167,8 @@ def retry_request(request_func, youtube_service, retries=5, backoff_factor=0.2):
                     time.sleep(sleep_time)
                 else:
                     logger.error(
-                        f"Access forbidden due to {error_reason}. Not rotating API keys.")
+                        f"Access forbidden due to {error_reason}. Not rotating API keys."
+                    )
                     return None, youtube_service
             else:
                 logger.error(
@@ -196,7 +177,8 @@ def retry_request(request_func, youtube_service, retries=5, backoff_factor=0.2):
                 return None, youtube_service
         except Exception as e:
             logger.error(
-                f"Failed to execute request due to an unexpected error: {e}")
+                f"Failed to execute request due to an unexpected error: {e}"
+            )
             return None, youtube_service
 
     logger.error(
@@ -223,39 +205,56 @@ def fetch_video_metadata(youtube, video_id, channel_id):
             - video_title (str or None): The title of the video if found; otherwise, None.
             - channel_name (str or None): The name of the channel if found; otherwise, None.
     """
-    global video_metadata_cache
+    global video_metadata_cache, channel_metadata_cache
+
+    # Check if video metadata is already cached
     if video_id in video_metadata_cache:
         logger.debug(
-            f"Video metadata for video ID {video_id} fetched from cache."
-        )
+            f"Video metadata for video ID {video_id} fetched from cache.")
         return video_metadata_cache[video_id]
 
     try:
-        def request_func(youtube_service):
+        # Fetch video details
+        def video_request_func(youtube_service):
             return youtube_service.videos().list(part="snippet", id=video_id)
 
-        video_response, youtube_service = retry_request(request_func, youtube)
+        video_response, youtube_service = retry_request(
+            video_request_func, youtube)
         if not video_response or not video_response.get("items"):
             logger.warning(f"No video found with ID {video_id}.")
             return None, None
+
         video_title = video_response["items"][0]["snippet"]["title"]
         logger.info(f"Video Title: {video_title}")
 
-        def channel_request_func(youtube_service):
-            return youtube_service.channels().list(part="snippet", id=channel_id)
+        # Fetch channel name from cache or API
+        if channel_id in channel_metadata_cache:
+            channel_name = channel_metadata_cache[channel_id]
+            logger.debug(
+                f"Channel name for channel ID {channel_id} fetched from cache.")
+        else:
+            def channel_request_func(youtube_service):
+                return youtube_service.channels().list(
+                    part="snippet",
+                    id=channel_id
+                )
 
-        channel_response, youtube_service = retry_request(
-            channel_request_func, youtube_service)
-        if not channel_response or not channel_response.get("items"):
-            logger.warning(f"No channel found with ID {channel_id}.")
-            return None, None
-        channel_name = channel_response["items"][0]["snippet"]["title"]
-        logger.info(f"Channel Name: {channel_name}")
+            channel_response, youtube_service = retry_request(
+                channel_request_func, youtube)
+            if channel_response and channel_response.get("items"):
+                channel_name = channel_response["items"][0]["snippet"]["title"]
+                channel_metadata_cache[channel_id] = channel_name
+                logger.info(f"Channel Name: {channel_name}")
+            else:
+                logger.warning(
+                    f"Could not retrieve channel name for channel ID {channel_id}.")
+                channel_name = None
 
-        # Cache the result
+        # Cache the video metadata
         video_metadata_cache[video_id] = (video_title, channel_name)
 
         return video_title, channel_name
+
     except Exception as e:
         logger.error(
             f"Failed to fetch video metadata for video ID {video_id} and channel ID {channel_id}: {e}"
@@ -282,14 +281,12 @@ def get_most_recent_comment_date(db, channel_id, video_id, initial_fetch_date):
     """
     most_recent_comment = db.get_most_recent_comment(channel_id, video_id)
     return (
-        parse(most_recent_comment["snippet"]
-              ["topLevelComment"]["snippet"]["updatedAt"])
+        parse(most_recent_comment["updated_at"])
         if most_recent_comment
         else parse(initial_fetch_date)
     )
 
 
-@limit_concurrent_requests(semaphore)
 def fetch_comments_page(youtube, video_id, page_token, max_results):
     """
     Fetches a single page of comments for a specified YouTube video.
@@ -313,7 +310,7 @@ def fetch_comments_page(youtube, video_id, page_token, max_results):
     try:
         def request_func(youtube_service):
             return youtube_service.commentThreads().list(
-                part="snippet,replies",
+                part="snippet",
                 videoId=video_id,
                 maxResults=max_results,
                 order="time",
@@ -350,17 +347,19 @@ def get_progress(db, video_id):
 
 def save_progress(db, video_id, page_token):
     """
-    Saves the current page token for a specific video to the database.
-
-    This function updates the progress tracking in the database, allowing the script
-    to resume fetching comments from the last processed page in future runs.
+    Saves the current page token for a specific video to the progress collection.
 
     Args:
         db (DatabaseConnection): The database connection instance.
         video_id (str): The ID of the YouTube video.
-        page_token (str): The current page token to save.
+        page_token (str): The current page token.
     """
+    if not video_id:
+        db.logger.warning(
+            "Attempted to save progress without a valid video_id. Skipping.")
+        return
     db.save_progress(video_id, page_token)
+
 
 
 def fetch_comments_with_resume(youtube, video_id, channel_id, db, max_results=100, initial_fetch_date=CUTOFF_DATE):
@@ -441,10 +440,21 @@ def fetch_comments_with_resume(youtube, video_id, channel_id, db, max_results=10
                         "youtube_service": youtube  # Include updated service
                     }
 
-                # Enrich comment with video title and channel name
-                comment["snippet"]["videoTitle"] = video_title
-                comment["snippet"]["channelName"] = channel_name
-                all_comments.append(comment)
+                # Enrich comment with standardized structure
+                enriched_comment = {
+                    "video_id": video_id,
+                    "video_title": video_title,
+                    "channel_id": channel_id,
+                    "channel_name": channel_name,
+                    "comment_id": comment["id"],
+                    "author": comment["snippet"]["topLevelComment"]["snippet"].get("authorDisplayName"),
+                    "author_channel_id": comment["snippet"]["topLevelComment"]["snippet"].get("authorChannelId", {}).get("value"),
+                    "text": comment["snippet"]["topLevelComment"]["snippet"].get("textDisplay"),
+                    "like_count": comment["snippet"]["topLevelComment"]["snippet"].get("likeCount"),
+                    "published_at": comment["snippet"]["topLevelComment"]["snippet"].get("publishedAt"),
+                    "updated_at": comment["snippet"]["topLevelComment"]["snippet"].get("updatedAt")
+                }
+                all_comments.append(enriched_comment)
 
             # Save progress after processing a page
             if next_page_token:
@@ -494,11 +504,11 @@ def get_top_channels(youtube, channels=CHANNELS, n=3):
     """
     for channel_name, channel_info in channels.items():
         try:
+       
             def request_func(youtube_service):
                 return youtube_service.channels().list(
                     part="statistics",
-                    # Valid as per documentation
-                    forHandle=channel_info["handle"]
+                    forHandle=channel_info.get("handle")
                 )
 
             response, youtube = retry_request(request_func, youtube)
@@ -512,12 +522,12 @@ def get_top_channels(youtube, channels=CHANNELS, n=3):
                 )
             else:
                 logger.warning(
-                    f"Could not retrieve subscriber count for channel handle: {channel_info['handle']}"
+                    f"Could not retrieve subscriber count for channel handle: {channel_info.get('handle')}"
                 )
                 channel_info["subscriber_count"] = 0
         except Exception as e:
             logger.error(
-                f"Error fetching subscriber count for channel handle {channel_info['handle']}: {e}"
+                f"Error fetching subscriber count for channel handle {channel_info.get('handle')}: {e}"
             )
             channel_info["subscriber_count"] = 0
 
@@ -536,9 +546,9 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
     """
     Fetches all unique comment threads for a specific YouTube channel.
 
-    This function retrieves all comment threads related to a given channel by fetching
-    comments from all videos associated with the channel. It enriches each comment
-    with the video title and channel name before storing them in the database.
+    This function retrieves all comment threads related to a given channel using
+    the allThreadsRelatedToChannelId parameter. It enriches each comment with the
+    video title and channel name before storing them in the database.
 
     Args:
         youtube (googleapiclient.discovery.Resource): The YouTube API client.
@@ -562,7 +572,7 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
 
         channel_response, youtube_service = retry_request(
             channel_request_func, youtube)
-        if not channel_response["items"]:
+        if not channel_response.get("items"):
             logger.warning(f"No channel found with ID {channel_id}.")
             return
         channel_name = channel_response["items"][0]["snippet"]["title"]
@@ -573,8 +583,14 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
         )
         channel_name = None
 
+    if not channel_name:
+        logger.warning(
+            f"Skipping comment fetching for channel ID {channel_id} due to missing channel name."
+        )
+        return
+
     page_token = None
-    processed_videos = set()  # Track processed video IDs
+    all_new_comments = 0  # To track the total number of new comments fetched
 
     while True:
         try:
@@ -593,32 +609,49 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
                 break
 
             comments = response.get("items", [])
-            if comments:
-                for comment in comments:
-                    video_id = comment["snippet"]["videoId"]
+            if not comments:
+                logger.debug("No comments found on this page.")
+                break
 
-                    if video_id in processed_videos:
-                        logger.debug(
-                            f"Already processed video ID: {video_id}. Skipping."
-                        )
-                        continue  # Skip if already processed
+            enriched_comments = []
 
-                    processed_videos.add(video_id)  # Mark as processed
+            for comment in comments:
+                # Extract necessary fields from the comment thread
+                comment_data = comment["snippet"]["topLevelComment"]["snippet"]
+                # Changed from "videoId" to "video_id"
+                video_id = comment_data.get("videoId")
 
-                    # Fetch comments with resume capability (includes video metadata)
-                    result = fetch_comments_with_resume(
-                        youtube_service,
-                        video_id,
-                        channel_id,
-                        db,
-                        max_results=max_results,
-                        initial_fetch_date=CUTOFF_DATE
-                    )
-                    # Update youtube_service if rotated
-                    youtube_service = result.get(
-                        "youtube_service", youtube_service)
-                    if result and result["comments"]:
-                        db.insert_comments(result["comments"])
+                if not video_id:
+                    logger.warning(
+                        "No video ID found in comment thread. Skipping.")
+                    continue
+
+                # Fetch video title if not already cached
+                video_title, _ = fetch_video_metadata(
+                    youtube_service, video_id, channel_id)
+
+                # Enrich comment with standardized structure
+                enriched_comment = {
+                    "video_id": video_id,
+                    "video_title": video_title,
+                    "channel_id": channel_id,
+                    "channel_name": channel_name,
+                    "comment_id": comment["id"],
+                    "author": comment_data.get("authorDisplayName"),
+                    "author_channel_id": comment_data.get("authorChannelId"),
+                    "text": comment_data.get("textOriginal"),
+                    "like_count": comment_data.get("likeCount"),
+                    "published_at": comment_data.get("publishedAt"),
+                    "updated_at": comment_data.get("updatedAt")
+                }
+
+                enriched_comments.append(enriched_comment)
+
+            # Insert all enriched comments in bulk
+            if enriched_comments:
+                db.insert_comments(enriched_comments)
+                all_new_comments += len(enriched_comments)
+                logger.info(f"Inserted {len(enriched_comments)} new comments.")
 
             page_token = response.get('nextPageToken')
             if not page_token:
@@ -629,11 +662,20 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
                 f"An error occurred processing channel {channel_id}: {e}"
             )
             break
+        except Exception as e:
+            logger.error(
+                f"An unexpected error occurred while fetching comments for channel {channel_id}: {e}"
+            )
+            break
+
+    logger.info(
+        f"Finished fetching all comments for channel ID: {channel_id}. Total new comments: {all_new_comments}"
+    )
+
 
 # -----------------By Videos-----------------
 
 
-@limit_concurrent_requests(semaphore)
 def generate_videos_by_search(youtube, channel_id, search_keyword, max_results=50):
     """
     Generates video IDs by searching within a specific YouTube channel using a keyword.
@@ -683,10 +725,7 @@ def generate_videos_by_search(youtube, channel_id, search_keyword, max_results=5
             )
             break
 
-# -----------------By Playlists-----------------
 
-
-@limit_concurrent_requests(semaphore)
 def generate_playlists(youtube, channel_id, keywords=KEYWORDS, max_results=10):
     """
     Generates playlist IDs and titles that match specified keywords within a YouTube channel.
@@ -741,7 +780,6 @@ def generate_playlists(youtube, channel_id, keywords=KEYWORDS, max_results=10):
             break
 
 
-@limit_concurrent_requests(semaphore)
 def generate_videos(youtube, playlist_id, max_results=50):
     """
     Generates video IDs from a specified YouTube playlist.
@@ -811,49 +849,21 @@ def get_comments_by_playlist(youtube, channel_id, db, keywords=KEYWORDS, max_res
     if not isinstance(keywords, list):
         keywords = list(keywords)
 
-        processed_videos = set()  # Track processed video IDs
+    processed_videos = set()  # Track processed video IDs
 
-        try:
-            playlists = list(generate_playlists(
-                youtube, channel_id, keywords, max_results=max_results
-            ))
+    try:
+        playlists = list(generate_playlists(
+            youtube, channel_id, keywords, max_results=max_results
+        ))
 
-            if not playlists:
-                logger.info(
-                    f"No playlists found for channel ID {channel_id} with keywords {keywords}. Searching videos with the same keywords."
+        if not playlists:
+            logger.info(
+                f"No playlists found for channel ID {channel_id} with keywords {keywords}. Searching videos with the same keywords."
+            )
+            for keyword in keywords:
+                videos = generate_videos_by_search(
+                    youtube, channel_id, keyword, max_results=max_results
                 )
-                for keyword in keywords:
-                    videos = generate_videos_by_search(
-                        youtube, channel_id, keyword, max_results=max_results
-                    )
-                    for video_id in videos:
-                        if video_id in processed_videos:
-                            logger.debug(
-                                f"Already processed video ID: {video_id}. Skipping."
-                            )
-                            continue
-                        processed_videos.add(video_id)
-
-                        logger.info(f"Fetching comments for video: {video_id}")
-                        result = fetch_comments_with_resume(
-                            youtube,
-                            video_id,
-                            channel_id,
-                            db,
-                            max_results=100,
-                            initial_fetch_date=CUTOFF_DATE
-                        )
-                        # Update youtube_service if rotated
-                        youtube = result.get("youtube_service", youtube)
-                        if result and result["comments"]:
-                            db.insert_comments(result["comments"])
-                return
-
-            for playlist_id, playlist_title in playlists:
-                logger.info(
-                    f"Processing Playlist ID: {playlist_id}, Title: {playlist_title}"
-                )
-                videos = generate_videos(youtube, playlist_id)
                 for video_id in videos:
                     if video_id in processed_videos:
                         logger.debug(
@@ -875,10 +885,46 @@ def get_comments_by_playlist(youtube, channel_id, db, keywords=KEYWORDS, max_res
                     youtube = result.get("youtube_service", youtube)
                     if result and result["comments"]:
                         db.insert_comments(result["comments"])
-        except HttpError as e:
-            logger.error(
-                f"An error occurred processing channel {channel_id} with keywords '{keywords}': {e}"
+            return
+
+        for playlist_id, playlist_title in playlists:
+            logger.info(
+                f"Processing Playlist ID: {playlist_id}, Title: {playlist_title}"
             )
+            try:
+                videos_generator = generate_videos(
+                    youtube, playlist_id, max_results=50)
+                for video_id in videos_generator:
+                    if video_id in processed_videos:
+                        logger.debug(
+                            f"Already processed video ID: {video_id}. Skipping."
+                        )
+                        continue
+                    processed_videos.add(video_id)
+
+                    logger.info(f"Fetching comments for video: {video_id}")
+                    result = fetch_comments_with_resume(
+                        youtube,
+                        video_id,
+                        channel_id,
+                        db,
+                        max_results=100,
+                        initial_fetch_date=CUTOFF_DATE
+                    )
+                    # Update youtube_service if rotated
+                    youtube = result.get("youtube_service", youtube)
+                    if result and result["comments"]:
+                        db.insert_comments(result["comments"])
+            except Exception as e:
+                logger.error(
+                    f"An error occurred while processing playlist {playlist_id}: {e}"
+                )
+
+    except HttpError as e:
+        logger.error(
+            f"An error occurred processing channel {channel_id} with keywords '{keywords}': {e}"
+        )
+
 
 # -----------------Main Execution-----------------
 
@@ -951,7 +997,7 @@ def main():
     """
     youtube_service = build_youtube_service()
     with DatabaseConnection() as db:
-        process_channels(youtube_service, db, limit_channels=len(CHANNELS))
+        process_channels(youtube_service, db)
 
 
 if __name__ == "__main__":
