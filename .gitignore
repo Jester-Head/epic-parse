@@ -7,3 +7,6 @@ tests
 .pytest_cache
 logs
 video_metadata_cache.json
+channel_metadata_cache.json
+private_files
+Youtube/youtube_api_scripts/logging_config.json

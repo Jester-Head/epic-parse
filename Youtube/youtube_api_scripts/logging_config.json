@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "disable_existing_loggers": false,
+    "disable_existing_loggers": true,
     "formatters": {
         "standard": {
             "format": "%(asctime)s - %(levelname)s - %(name)s: %(message)s"
@@ -20,7 +20,7 @@
             "filename": "logs/youtube.log",
             "mode": "a",
             "maxBytes": 1048576,
-            "backupCount": 3,
+            "backupCount": 2,
             "encoding": "utf-8"
         }
     },

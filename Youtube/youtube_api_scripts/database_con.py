@@ -1,7 +1,7 @@
 # database_con.py
 
 import logging
-import pymongo
+from pymongo import MongoClient, ASCENDING, DESCENDING, errors, UpdateOne
 from datetime import datetime
 from config import MONGO_URI, MONGO_DB, MONGO_COLL
 
@@ -38,7 +38,7 @@ class DatabaseConnection:
         Establishes a connection to the MongoDB database and sets up the necessary indexes.
         """
         try:
-            self.client = pymongo.MongoClient(
+            self.client = MongoClient(
                 self.mongo_uri, serverSelectionTimeoutMS=5000)
             self.db = self.client[self.mongo_db]
             self.collection = self.db[self.mongo_coll]
@@ -50,30 +50,30 @@ class DatabaseConnection:
                 # Indexes for comments collection
                 {
                     "collection": self.collection,
-                    "keys": [("channel_id", pymongo.ASCENDING),
-                             ("like_count", pymongo.ASCENDING),
-                             ("updated_at", pymongo.ASCENDING)],
+                    "keys": [("channel_id", ASCENDING),
+                             ("like_count", ASCENDING),
+                             ("updated_at", ASCENDING)],
                     "unique": False,
                     "name": "channel_like_updated_idx"
                 },
                 {
                     "collection": self.collection,
-                    "keys": [("channel_id", pymongo.ASCENDING),
-                             ("video_id", pymongo.ASCENDING),
-                             ("updated_at", pymongo.DESCENDING)],
+                    "keys": [("channel_id", ASCENDING),
+                             ("video_id", ASCENDING),
+                             ("updated_at", DESCENDING)],
                     "unique": False,
                     "name": "channel_video_updated_idx"
                 },
                 {
                     "collection": self.collection,
-                    "keys": [("comment_id", pymongo.ASCENDING)],
+                    "keys": [("comment_id", ASCENDING)],
                     "unique": True,
                     "name": "comment_id_unique_idx"
                 },
                 # Indexes for progress collection
                 {
                     "collection": self.progress_collection,
-                    "keys": [("video_id", pymongo.ASCENDING)],
+                    "keys": [("video_id", ASCENDING)],
                     "unique": True,
                     "name": "video_id_unique_idx",
                     "sparse": True  # Use sparse=True instead of partialFilterExpression
@@ -92,7 +92,7 @@ class DatabaseConnection:
 
             self.logger.info(
                 "Database connection established and indexes ensured.")
-        except pymongo.errors.PyMongoError as e:
+        except errors.PyMongoError as e:
             self.logger.error(
                 f"Error during database connection or index creation: {e}")
             raise e
@@ -133,7 +133,7 @@ class DatabaseConnection:
                     collection.drop_index(name)
                     self.logger.info(
                         f"Dropped existing index '{name}' due to configuration mismatch.")
-                except pymongo.errors.PyMongoError as e:
+                except errors.PyMongoError as e:
                     self.logger.error(f"Failed to drop index '{name}': {e}")
                     raise e
 
@@ -151,7 +151,7 @@ class DatabaseConnection:
                 self.logger.info(
                     f"Created index '{name}' on fields {keys} with unique={unique}."
                 )
-        except pymongo.errors.PyMongoError as e:
+        except errors.PyMongoError as e:
             self.logger.error(f"Failed to create index '{name}': {e}")
             raise e
 
@@ -169,10 +169,10 @@ class DatabaseConnection:
         try:
             most_recent_comment = self.collection.find_one(
                 {"channel_id": channel_id, "video_id": video_id},
-                sort=[("updated_at", pymongo.DESCENDING)]
+                sort=[("updated_at", DESCENDING)]
             )
             return most_recent_comment
-        except pymongo.errors.PyMongoError as e:
+        except errors.PyMongoError as e:
             self.logger.error(f"Error retrieving most recent comment: {e}")
             return None
 
@@ -203,9 +203,9 @@ class DatabaseConnection:
             else:
                 self.logger.debug(
                     f"No new comment inserted (duplicate or older). ID: {comment['comment_id']}")
-        except pymongo.errors.DuplicateKeyError:
+        except errors.DuplicateKeyError:
             self.logger.warning("Duplicate comment not inserted.")
-        except pymongo.errors.PyMongoError as e:
+        except errors.PyMongoError as e:
             self.logger.error(f"Database operation failed: {e}")
 
     def insert_comments(self, comments):
@@ -230,7 +230,7 @@ class DatabaseConnection:
                         "Comment is missing a unique 'comment_id'; skipping insert.")
                     continue
                 operations.append(
-                    pymongo.UpdateOne(
+                    UpdateOne(
                         {"comment_id": comment["comment_id"]},
                         {"$setOnInsert": comment},
                         upsert=True
@@ -240,9 +240,9 @@ class DatabaseConnection:
                 result = self.collection.bulk_write(operations, ordered=False)
                 self.logger.info(
                     f"Inserted {result.upserted_count} new comments.")
-        except pymongo.errors.BulkWriteError as bwe:
+        except errors.BulkWriteError as bwe:
             self.logger.error(f"Bulk write error: {bwe.details}")
-        except pymongo.errors.PyMongoError as e:
+        except errors.PyMongoError as e:
             self.logger.error(f"Failed to insert comments: {e}")
 
     def get_progress(self, video_id):
@@ -259,7 +259,7 @@ class DatabaseConnection:
             progress = self.progress_collection.find_one(
                 {"video_id": video_id})
             return progress.get("last_page_token") if progress else None
-        except pymongo.errors.PyMongoError as e:
+        except errors.PyMongoError as e:
             self.logger.error(
                 f"Failed to retrieve progress for video ID {video_id}: {e}")
             return None
@@ -281,14 +281,14 @@ class DatabaseConnection:
                 {
                     "$set": {
                         "last_page_token": page_token,
-                        "timestamp": datetime.utcnow()
+                        "timestamp": datetime.timestamp(datetime.now())
                     }
                 },
                 upsert=True
             )
             self.logger.info(
                 f"Progress saved for video ID {video_id}. Page Token: {page_token}")
-        except pymongo.errors.PyMongoError as e:
+        except errors.PyMongoError as e:
             self.logger.error(
                 f"Failed to save progress for video ID {video_id}: {e}")
 
@@ -300,7 +300,7 @@ class DatabaseConnection:
             try:
                 self.client.close()
                 self.logger.info("Database connection closed.")
-            except pymongo.errors.PyMongoError as e:
+            except errors.PyMongoError as e:
                 self.logger.error(f"Error closing database connection: {e}")
 
     def __enter__(self):
