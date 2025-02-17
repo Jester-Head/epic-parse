@@ -1,9 +1,11 @@
 # database_con.py
 
 import logging
-from pymongo import MongoClient, ASCENDING, DESCENDING, errors, UpdateOne
+from pymongo import MongoClient, ASCENDING, DESCENDING, errors
+from pymongo.operations import UpdateOne
 from datetime import datetime
 from config import MONGO_URI, MONGO_DB, MONGO_COLL
+import pymongo
 
 
 class DatabaseConnection:

@@ -10,3 +10,6 @@ video_metadata_cache.json
 channel_metadata_cache.json
 private_files
 Youtube/youtube_api_scripts/logging_config.json
+/highlighted_code.html
+/.idea
+/Youtube/yt_cache

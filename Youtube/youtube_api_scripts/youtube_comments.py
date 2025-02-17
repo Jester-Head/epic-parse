@@ -21,14 +21,17 @@ from database_con import DatabaseConnection
 # -----------------Logging Setup-----------------
 def setup_logging(config_path=LOG_CONFIG_PATH):
     """
-    Sets up the logging configuration for the script.
+    Sets up the logging configuration for the application.
 
-    This function creates a 'logs' directory if it doesn't exist and configures the logging
-    based on the JSON configuration file provided.
+    This function initializes logging based on the configuration file
+    provided in the path. It ensures that the directory for storing
+    logs exists before loading the logging configuration. The
+    configuration is expected to be in JSON format.
 
     Args:
-        config_path (str, optional): Path to the JSON logging configuration file.
-                                     Defaults to LOG_CONFIG_PATH from config.
+        config_path: The path to the JSON file containing the logging
+            configuration data.
+
     """
     log_dir = 'logs'
     os.makedirs(log_dir, exist_ok=True)
@@ -46,6 +49,18 @@ logger = logging.getLogger(__name__)
 
 # -----------------Video and Channel Metadata Cache-----------------
 class LRUCache(OrderedDict):
+    """Implements a Least Recently Used (LRU) Cache as an extension of an OrderedDict.
+
+    An LRU Cache automatically discards the least recently used items when the cache
+    reaches its designated maximum size. This class is particularly useful for managing
+    caches where memory usage needs to be limited. It ensures that the most frequently
+    or recently accessed items remain in the cache for quick retrieval. The eviction
+    policy is based on the order of item insertion or use.
+
+    Attributes:
+        max_size (int): The maximum number of elements that the cache can hold. When
+            the size exceeds this limit, the least recently used element is removed.
+    """
     def __init__(self, max_size):
         self.max_size = max_size
         super().__init__()
@@ -60,8 +75,8 @@ class LRUCache(OrderedDict):
 MAX_CACHE_SIZE = 1000
 
 # --- Use os.path.join for correct path construction ---
-VIDEO_CACHE_FILE = os.path.join('Youtube', 'yt_cache', 'video_metadata_cache.json')
-CHANNEL_CACHE_FILE = os.path.join('Youtube', 'yt_cache', 'channel_metadata_cache.json')
+VIDEO_CACHE_FILE = os.path.join('Youtube','yt_cache', 'video_metadata_cache.json')
+CHANNEL_CACHE_FILE = os.path.join('Youtube','yt_cache', 'channel_metadata_cache.json')
 # --- End of path changes ---
 
 if os.path.exists(VIDEO_CACHE_FILE):
@@ -84,7 +99,18 @@ else:
 
 
 def save_caches():
-    """Saves the caches to JSON files."""
+    """
+    Saves the video metadata and channel metadata caches to their respective files.
+
+    The function ensures that the directories for the cache files exist and creates
+    those directories if necessary. The data is serialized using a custom serializer
+    to handle non-standard data types such as datetime. The process logs debug-level
+    messages indicating the successful saving of each cache file.
+
+    Raises:
+        TypeError: Raised by the custom serializer when an unsupported data type
+            is encountered.
+    """
 
     def custom_serializer(obj):
         if isinstance(obj, datetime):
@@ -115,14 +141,16 @@ GLOBAL_BACKOFF_TIME = 60 * 5  # 5 minutes
 
 def build_youtube_service():
     """
-    Builds the YouTube API service client using the next available API key.
+    Builds and returns a YouTube service object using the provided API key.
 
-    This function cycles through the provided `API_KEYS` to distribute the quota
-    usage across multiple keys. It also disables the discovery cache to prevent
-    dependency on deprecated libraries.
+    This function utilizes the `build` method from the `googleapiclient.discovery`
+    module to create a YouTube API client. The client is configured with the current
+    API key from a predefined cycle and does not use discovery caching. It logs the
+    API key being used for transparency.
 
     Returns:
-        googleapiclient.discovery.Resource: An instance of the YouTube API service client.
+        googleapiclient.discovery.Resource: A YouTube service object that allows
+        interaction with the YouTube Data API.
     """
     api_key = next(api_key_cycle)
     logger.info(f"Using API Key: {api_key}")
@@ -132,29 +160,44 @@ def build_youtube_service():
 # -----------------Helpers-----------------
 # Custom exception to signal that all keys are exhausted.
 class QuotaExhaustedError(Exception):
-    """Raised when all API keys have been exhausted due to quota errors."""
+    """
+    Exception raised when a quota limit is exhausted.
+
+    This exception is used to indicate that a certain resource or action
+    has reached its maximum allowed usage, and no further operations can
+    be performed until the quota is reset or extended.
+
+    Attributes:
+        message (str): The error message describing the quota exhaustion.
+    """
     pass
 
 
 def retry_request(request_func, youtube_service, retries=5, backoff_factor=0.2):
     """
-    Executes a YouTube API request with retry logic. In the event of quota-related
-    errors, rotates the API key and tries again. When all keys are exhausted, a
-    QuotaExhaustedError is raised.
+    Retries a YouTube API request with incremental backoff and optional API key rotation.
+
+    This function handles YouTube API requests by attempting retries in case of server errors or quota-related errors
+    using exponential backoff. If quota errors are encountered, it will rotate through a predefined set of API keys.
+    If all API keys are exhausted and a global backoff period is in effect, it will wait for the global backoff
+    period to expire before retrying. The function also handles parsing error responses for logging purposes.
 
     Args:
-        request_func (callable): A function that takes a YouTube service object and
-            returns a request object.
-        youtube_service (Resource): A YouTube API service instance.
-        retries (int): Maximum number of retry attempts.
-        backoff_factor (float): Base value for exponential backoff.
+        request_func (Callable): A function that accepts a YouTube API service instance and returns a resource method
+            to be executed as the API request.
+        youtube_service (googleapiclient.discovery.Resource): The YouTube API service instance used for executing
+            API requests.
+        retries (int, optional): The number of retry attempts allowed before giving up. Defaults to 5.
+        backoff_factor (float, optional): The base backoff factor for exponential backoff between retries.
+            Defaults to 0.2.
 
     Returns:
-        tuple: (response, updated_youtube_service) if successful, or None if a
-               non-quota error occurs.
+        Tuple[Optional[dict], googleapiclient.discovery.Resource]: A tuple containing either the API response
+        as a dictionary if successful or None if all retries fail, and the YouTube API service instance
+        (potentially with a rotated API key).
 
     Raises:
-        QuotaExhaustedError: When all API keys have been exhausted due to quota errors.
+        QuotaExhaustedError: Raised if all API keys are exhausted due to quota-related errors.
     """
     global last_global_exhaustion_time
     key_rotations = 0
@@ -220,21 +263,27 @@ def retry_request(request_func, youtube_service, retries=5, backoff_factor=0.2):
 
 def fetch_video_metadata(youtube, video_id, channel_id):
     """
-    Retrieves the title of a video and the name of its channel, utilizing caching to minimize API calls.
-
-    This function first checks if the metadata for the given `video_id` is present in the
-    `video_metadata_cache`. If not, it fetches the data from the YouTube Data API and
-    updates the cache accordingly.
+    Fetches metadata for a given YouTube video and its associated channel. The function attempts to retrieve the required
+    information either from cache or by making API calls. If the metadata for the given video or channel ID
+    is available in the cache, it will fetch the data from there. Otherwise, it makes a request to the YouTube API
+    to retrieve the video title and channel name. Additionally, any metadata retrieved from the YouTube API
+    is cached for future use. If the metadata cannot be retrieved, it will log appropriate warnings or errors.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        video_id (str): The ID of the YouTube video.
-        channel_id (str): The ID of the YouTube channel.
+        youtube:
+            A YouTube Data API client object used to make API requests.
+        video_id:
+            A string representing the ID of the YouTube video for which metadata is being fetched.
+        channel_id:
+            A string representing the ID of the YouTube channel associated with the video.
 
     Returns:
         tuple:
-            - video_title (str or None): The title of the video if found; otherwise, None.
-            - channel_name (str or None): The name of the channel if found; otherwise, None.
+            A tuple containing the video title as the first element and the channel name as the second element.
+            If metadata cannot be retrieved, both elements will be None.
+
+    Raises:
+        None
     """
     global video_metadata_cache, channel_metadata_cache
 
@@ -292,23 +341,21 @@ def fetch_video_metadata(youtube, video_id, channel_id):
         )
         return None, None
 
-
 def get_most_recent_comment_date(db, channel_id, video_id, initial_fetch_date) -> datetime:
     """
-    Retrieves the most recent comment date for a specific video from the database.
-
-    This function queries the database for the latest comment associated with the
-    given `channel_id` and `video_id`. If no comments are found, it defaults to the
-    provided `initial_fetch_date`.
+    Retrieves the most recent comment date for a specified video and channel. If no comments
+    are found for the video, returns the provided initial fetch date.
 
     Args:
-        db (DatabaseConnection): The database connection instance.
-        channel_id (str): The ID of the YouTube channel.
-        video_id (str): The ID of the YouTube video.
-        initial_fetch_date (str): The initial date to start fetching comments from.
+        db: The database connection or handler used to perform the query.
+        channel_id: The identifier of the channel from which the video originates.
+        video_id: The identifier of the video for which the comment is being analyzed.
+        initial_fetch_date: The fallback date to be used if there are no comments
+            found in the database for the video.
 
     Returns:
-        datetime: The most recent comment date, parsed into a datetime object.
+        datetime: The date of the most recent comment for the specified video and
+        channel, or the initial fetch date if no comments exist.
     """
     most_recent_comment = db.get_most_recent_comment(channel_id, video_id)
     return (
@@ -320,23 +367,30 @@ def get_most_recent_comment_date(db, channel_id, video_id, initial_fetch_date) -
 
 def fetch_comments_page(youtube, video_id, page_token, max_results):
     """
-    Fetches a single page of comments for a specified YouTube video.
+    Fetches a page of comments from a YouTube video via the YouTube Data API v3.
 
-    This function retrieves a batch of comment threads associated with a video, ordered by time.
-    It handles pagination through the `page_token` and limits the number of comments per request
-    based on `max_results`.
+    This function retrieves a single page of comments for the specified video
+    using the YouTube Data API v3. It orders the comments by time and allows
+    pagination through the `page_token` parameter. The function handles API
+    requests with retry logic and returns the fetched comments along with
+    the next page token, if any, and the YouTube service object. Errors are
+    handled and logged appropriately.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        video_id (str): The ID of the YouTube video.
-        page_token (str): The page token for pagination. Use `None` for the first page.
-        max_results (int): The maximum number of comments to fetch per API call.
+        youtube: The authenticated YouTube service object used to make API requests.
+        video_id: The ID of the YouTube video for which comments are to be
+            retrieved.
+        page_token: A string token to retrieve the specific page of results.
+            If None, the first page of results is retrieved.
+        max_results: An integer specifying the maximum number of comments to
+            retrieve per request.
 
     Returns:
-        tuple:
-            - fetched_comments (list): A list of comment thread items retrieved.
-            - next_page_token (str or None): The token for the next page of results, if any.
-            - youtube_service (googleapiclient.discovery.Resource): The (possibly updated) YouTube API client.
+        tuple: A tuple containing:
+            - A list of comment items retrieved from the API.
+            - A string representing the next page token to retrieve the
+              subsequent page of results (if any).
+            - The original YouTube service object used for the requests.
     """
     try:
         def request_func(youtube_service):
@@ -359,31 +413,24 @@ def fetch_comments_page(youtube, video_id, page_token, max_results):
         return [], None, youtube_service
 
 
-def get_progress(db, video_id):
-    """
-    Retrieves the last saved page token for a specific video from the database.
-
-    This function is used to determine where to resume fetching comments in case the script
-    was previously interrupted or paused.
-
-    Args:
-        db (DatabaseConnection): The database connection instance.
-        video_id (str): The ID of the YouTube video.
-
-    Returns:
-        str or None: The last page token if found; otherwise, `None`.
-    """
-    return db.get_progress(video_id)
-
-
 def save_progress(db, video_id, page_token):
     """
-    Saves the current page token for a specific video to the progress collection.
+    Saves the progress of a video at a specific state in the database.
+
+    This function ensures that the provided `video_id` is valid before saving
+    the current progress state associated with it to the database. If no
+    valid video ID is provided, the function logs a warning and skips the
+    save operation.
 
     Args:
-        db (DatabaseConnection): The database connection instance.
-        video_id (str): The ID of the YouTube video.
-        page_token (str): The current page token.
+        db: The database connection or instance through which the progress
+            is saved. This must support methods for logging warnings
+            and saving progress details.
+        video_id: The identifier of the video whose progress needs to be
+            saved. This value must be non-empty for the save operation
+            to proceed.
+        page_token: A token representing the state or page position of the
+            video progress to be saved in the database.
     """
     if not video_id:
         db.logger.warning(
@@ -392,7 +439,47 @@ def save_progress(db, video_id, page_token):
     db.save_progress(video_id, page_token)
 
 
+
+def get_progress(db, video_id):
+    """
+    Retrieves the progress of a video for a specified user.
+
+    This function interacts with the database to fetch the saved progress of a
+    specific video. It is useful for resuming video playback from the point
+    where it was last left off.
+
+    Args:
+        db: The database connection or object used to retrieve the data.
+        video_id: The unique identifier of the video for which the progress
+            needs to be retrieved.
+
+    Returns:
+        The progress data corresponding to the given video ID, which may
+        include playback time or percentage watched.
+    """
+    return db.get_progress(video_id)
+
+
 def fetch_comments_with_resume(youtube, video_id, channel_id, db, max_results=100, initial_fetch_date=CUTOFF_DATE):
+    """
+    Fetches comments from a YouTube video, handling resumable fetch and ensuring no data duplication. This
+    function processes comments in paginated responses, enriches the data with video and channel metadata,
+    and filters out comments older than the specified cutoff date. Metadata and progress states are fetched
+    and saved to a database to allow interruption-resilient operation. Handles safety checks for infinite
+    loops due to unchanging page tokens.
+
+    Args:
+        youtube: The YouTube API service object, used to interact with the YouTube Data API.
+        video_id: The ID of the video for which comments are being fetched.
+        channel_id: The ID of the channel that owns the video, used to fetch and associate channel metadata.
+        db: The database connection object where progress state, comment data, and metadata are stored.
+        max_results: The maximum number of comments to fetch per API call (default is 100).
+        initial_fetch_date: The cutoff date for fetching comments; only comments newer than this date
+            will be processed (default value is defined by CUTOFF_DATE constant).
+
+    Returns:
+        dict: Contains the video title, channel name, fetched comments, and the YouTube API service object.
+    """
     logger.info(f"Fetching comments for video ID: {video_id}")
     all_comments = []
 
@@ -426,35 +513,35 @@ def fetch_comments_with_resume(youtube, video_id, channel_id, db, max_results=10
         if not fetched_comments:
             break
 
+        new_comments_in_page = []
         for comment in fetched_comments:
             comment_date_str = comment["snippet"]["topLevelComment"]["snippet"]["updatedAt"]
             comment_date = parse(comment_date_str)
-            if comment_date <= most_recent_comment_date:
-                logger.info(f"Reached already-fetched comments for video ID: {video_id}.")
-                if page_token:
-                    save_progress(db, video_id, page_token)
-                return {
+            if comment_date > most_recent_comment_date:
+                enriched_comment = {
+                    "video_id": video_id,
                     "video_title": video_title,
+                    "channel_id": channel_id,
                     "channel_name": channel_name,
-                    "comments": all_comments,
-                    "youtube_service": youtube
+                    "comment_id": comment["id"],
+                    "author": comment["snippet"]["topLevelComment"]["snippet"].get("authorDisplayName"),
+                    "author_channel_id": comment["snippet"]["topLevelComment"]["snippet"].get("authorChannelId", {}).get("value"),
+                    "text": comment["snippet"]["topLevelComment"]["snippet"].get("textDisplay"),
+                    "like_count": comment["snippet"]["topLevelComment"]["snippet"].get("likeCount"),
+                    "published_at": comment["snippet"]["topLevelComment"]["snippet"].get("publishedAt"),
+                    "updated_at": comment_date_str
                 }
+                new_comments_in_page.append(enriched_comment)
+            else:
+                logger.info(f"Skipping older comment {comment['id']} with date {comment_date_str}")
 
-            enriched_comment = {
-                "video_id": video_id,
-                "video_title": video_title,
-                "channel_id": channel_id,
-                "channel_name": channel_name,
-                "comment_id": comment["id"],
-                "author": comment["snippet"]["topLevelComment"]["snippet"].get("authorDisplayName"),
-                "author_channel_id": comment["snippet"]["topLevelComment"]["snippet"].get("authorChannelId", {}).get(
-                    "value"),
-                "text": comment["snippet"]["topLevelComment"]["snippet"].get("textDisplay"),
-                "like_count": comment["snippet"]["topLevelComment"]["snippet"].get("likeCount"),
-                "published_at": comment["snippet"]["topLevelComment"]["snippet"].get("publishedAt"),
-                "updated_at": comment["snippet"]["topLevelComment"]["snippet"].get("updatedAt")
-            }
-            all_comments.append(enriched_comment)
+        if new_comments_in_page:
+            all_comments.extend(new_comments_in_page)
+        else:
+            logger.info(f"No new comments found in current page for video ID: {video_id}. Ending fetch.")
+            if page_token:
+                save_progress(db, video_id, page_token)
+            break
 
         if next_page_token:
             save_progress(db, video_id, next_page_token)
@@ -471,26 +558,25 @@ def fetch_comments_with_resume(youtube, video_id, channel_id, db, max_results=10
     }
 
 
+
 def get_top_channels(youtube, channels=CHANNELS, n=3):
     """
-    Retrieves the top `n` YouTube channels sorted by subscriber count.
-
-    This function iterates through the provided `channels` dictionary, fetches the
-    subscriber count for each channel using its handle, and returns the top `n`
-    channels based on the highest subscriber counts.
+    Fetches the subscriber counts for a list of YouTube channels and returns the top channels
+    sorted by subscriber count in descending order.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        channels (dict, optional): A dictionary of channel information where the key is
-                                   the channel name and the value is a dictionary containing
-                                   channel details, including the "handle". Defaults to CHANNELS.
-        n (int, optional): The number of top channels to return based on subscriber count.
-                           Defaults to 3.
+        youtube: The YouTube API client used to make requests.
+        channels: A dictionary containing channel information, where keys represent
+            channel names, and values are dictionaries containing channel metadata,
+            such as the "handle".
+        n: The number of top channels to return based on their subscriber counts.
 
     Returns:
-        list: A list of tuples, each containing the channel name and its corresponding information
-              dictionary, sorted in descending order of subscriber count. The list contains up to
-              `n` channels.
+        List[Tuple[str, Dict]]: A list of tuples containing the channel name and its
+        metadata for the top `n` channels sorted by subscriber count.
+
+    Raises:
+        Exception: If any errors occur during the API request or while processing the data.
     """
     for channel_name, channel_info in channels.items():
         try:
@@ -535,18 +621,25 @@ def get_top_channels(youtube, channels=CHANNELS, n=3):
 
 def get_all_channel_comments(youtube, channel_id, db, max_results=100):
     """
-    Fetches all unique comment threads for a specific YouTube channel.
+    Fetches all comment threads of a YouTube channel and stores them in a database.
 
-    This function retrieves all comment threads related to a given channel using
-    the allThreadsRelatedToChannelId parameter. It enriches each comment with the
-    video title and channel name before storing them in the database.
+    This function retrieves all top-level comment threads associated with a
+    specific YouTube channel and enriches the data with additional metadata,
+    such as video title, author details, comment text, and publication timestamps.
+    Enriched comments are then saved in bulk to the provided database. The function
+    handles pagination, retries on API request failures, and ensures proper logging
+    for operational visibility.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        channel_id (str): The ID of the YouTube channel.
-        db (DatabaseConnection): The database connection instance.
-        max_results (int, optional): The maximum number of comment threads to fetch per API call.
-                                     Defaults to 100.
+        youtube: The YouTube API client to fetch channel and comment data.
+        channel_id: The ID of the YouTube channel whose comments need to be retrieved.
+        db: The database client where enriched comment data will be inserted.
+        max_results: Maximum number of comments to fetch per API request
+            (default: 100).
+
+    Raises:
+        HttpError: If an HTTP error occurs while interacting with the YouTube API.
+        Exception: For other unexpected errors during the execution.
 
     Returns:
         None
@@ -669,20 +762,28 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
 
 def generate_videos_by_search(youtube, channel_id, search_keyword, max_results=50):
     """
-    Generates video IDs by searching within a specific YouTube channel using a keyword.
+    Generates video IDs by searching for videos on a specific YouTube channel using a
+    keyword and pagination.
 
-    This generator function performs a search query within the specified channel for videos
-    that match the provided `search_keyword`. It yields video IDs one by one.
+    This function performs a search query for videos within a specific YouTube channel
+    based on the specified search keyword and retrieves the video IDs through a paginated
+    API request process. It handles errors gracefully and yields video IDs along with the
+    YouTube service instance for further processing.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        channel_id (str): The ID of the YouTube channel to search within.
-        search_keyword (str): The keyword to search for in video titles.
-        max_results (int, optional): The maximum number of search results to fetch per API call.
-                                     Defaults to 50.
+        youtube: An instance of the YouTube Data API service client.
+        channel_id: A string representing the unique identifier of the YouTube channel
+            to search.
+        search_keyword: A string containing the search keyword to filter the videos.
+        max_results: An integer specifying the maximum number of results per API
+            request. Defaults to 50.
 
     Yields:
-        str: The ID of each matching YouTube video.
+        Tuple: A tuple containing the video ID as a string and the YouTube service
+        instance for further use.
+
+    Raises:
+        HttpError: If there is an error during the API request to the YouTube Data API.
     """
     page_token = None
     while True:
@@ -719,23 +820,19 @@ def generate_videos_by_search(youtube, channel_id, search_keyword, max_results=5
 
 def generate_playlists(youtube, channel_id, keywords=KEYWORDS, max_results=10):
     """
-    Generates playlist IDs and titles that match specified keywords within a YouTube channel.
-
-    This generator function retrieves playlists from a given channel and yields those
-    whose titles contain any of the specified `keywords`.
+    Generates playlists for a YouTube channel by filtering based on specific keywords. The function utilizes
+    the YouTube Data API to fetch playlists associated with a given channel ID, then compares the playlist
+    titles against a provided list of keywords. Playlists with titles matching any of the keywords are yielded.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        channel_id (str): The ID of the YouTube channel.
-        keywords (list or str, optional): A list of keywords to filter playlists by title.
-                                          Defaults to `KEYWORDS` from config.
-        max_results (int, optional): The maximum number of playlists to retrieve per API call.
-                                     Defaults to 10.
+        youtube: YouTube client instance to interact with the YouTube Data API.
+        channel_id: A string representing the ID of the YouTube channel to retrieve playlists for.
+        keywords: A list of keywords to filter playlists by matching them against playlist titles.
+        max_results: An integer specifying the maximum number of playlist results to fetch per API call.
 
     Yields:
-        tuple: A tuple containing:
-               - playlist_id (str): The ID of the matching playlist.
-               - playlist_title (str): The title of the matching playlist.
+        tuple: A tuple containing the playlist ID (as a string) and playlist title (as a string) for
+        playlists that match any of the specified keywords.
     """
     if not isinstance(keywords, list):
         keywords = list(keywords)
@@ -773,18 +870,22 @@ def generate_playlists(youtube, channel_id, keywords=KEYWORDS, max_results=10):
 
 def generate_videos(youtube, playlist_id, max_results=50):
     """
-    Generates video IDs from a specified YouTube playlist.
-
-    This generator function retrieves all videos within a given playlist and yields their IDs.
+    Generates video IDs from a YouTube playlist using the YouTube Data API. The function
+    retrieves video information iteratively, handling paginated results and potential
+    errors through retries. It stops processing when all videos have been retrieved
+    or if an unrecoverable error occurs.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        playlist_id (str): The ID of the YouTube playlist.
-        max_results (int, optional): The maximum number of playlist items to retrieve per API call.
-                                     Defaults to 50.
+        youtube: A YouTube service instance to interact with the YouTube Data API.
+        playlist_id: The unique identifier of the YouTube playlist from which video IDs
+            are to be retrieved.
+        max_results: The maximum number of videos to fetch per request. Default is 50.
 
     Yields:
-        str: The ID of each video in the playlist.
+        str: The video ID of each video in the playlist.
+
+    Raises:
+        HttpError: If an unrecoverable error occurs while accessing the YouTube Data API.
     """
     page_token = None
     while True:
@@ -818,24 +919,22 @@ def generate_videos(youtube, playlist_id, max_results=50):
 
 def get_comments_by_playlist(youtube, channel_id, db, keywords=KEYWORDS, max_results=5):
     """
-    Fetches comments from YouTube videos within playlists that match specified keywords.
+    Fetches and processes comments from YouTube videos and playlists for a given channel based on specified keywords.
 
-    This function first attempts to retrieve playlists matching the provided `keywords`. If no
-    such playlists are found, it falls back to searching for videos using the same keywords and
-    fetching their comments. Comments are enriched with video titles and channel names before
-    being stored in the database.
+    This function retrieves playlists based on the provided keywords. If no playlists are found, it searches for videos
+    directly using the keywords. For each playlist or video identified, it fetches the comments, processes them, and
+    stores them in the provided database. It also takes care of avoiding redundant processing by keeping track of
+    already processed video IDs.
+
+    The function handles potential errors gracefully during the process and logs relevant information for debugging
+    and monitoring purposes.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        channel_id (str): The ID of the YouTube channel to search within.
-        db (DatabaseConnection): The database connection instance.
-        keywords (list or str, optional): A list of keywords to filter playlists and videos by.
-                                          Defaults to `KEYWORDS` from config.
-        max_results (int, optional): The maximum number of playlists or videos to retrieve per API call.
-                                     Defaults to 5.
-
-    Returns:
-        None
+        youtube: Google API client resource for YouTube used for fetching playlists, videos, and comments.
+        channel_id: str. The ID of the YouTube channel to search for playlists and videos.
+        db: Object representing the database handler where comments will be stored.
+        keywords: list. Keywords used to filter playlists and videos for processing. Defaults to KEYWORDS.
+        max_results: int. Maximum number of results to fetch for a single search or playlist. Defaults to 5.
     """
     if not isinstance(keywords, list):
         keywords = list(keywords)
@@ -923,25 +1022,26 @@ def get_comments_by_playlist(youtube, channel_id, db, keywords=KEYWORDS, max_res
 
 def process_channels(youtube, db, channels=CHANNELS, keywords=KEYWORDS, limit_channels=None):
     """
-    Processes multiple YouTube channels to fetch comments based on specified keywords.
-
-    This function iterates through a dictionary of channels, optionally limiting the number
-    of channels based on subscriber count. For each channel, it determines whether to
-    fetch all comments or filter them based on playlists and keywords before storing them
-    in the database.
+    Processes a list of YouTube channels to fetch comments, either for the entire channel or
+    specific playlists, based on certain conditions. The function allows optionally limiting
+    the number of channels processed based on subscriber count.
 
     Args:
-        youtube (googleapiclient.discovery.Resource): The YouTube API client.
-        db (DatabaseConnection): The database connection instance.
-        channels (dict, optional): A dictionary of channels to process, where the key is the
-                                   channel name and the value is a dictionary containing channel
-                                   details. Defaults to `CHANNELS` from config.
-        keywords (list or str, optional): A list of keywords to filter comments by. Defaults to `KEYWORDS` from config.
-        limit_channels (int, optional): The number of top channels to process based on subscriber count.
-                                        If `None`, all channels are processed. Defaults to None.
+        youtube: The YouTube API client instance used for making YouTube data requests.
+            Its configuration and authentication should be valid.
+        db: The database connection or instance where fetched comments will be stored.
+            It will handle data insertion and updates.
+        channels: A dictionary containing channel information with channel names as keys
+            and metadata as values. Metadata should include at least "channel_id" and
+            optionally "only_wow" flag. Defaults to CHANNELS.
+        keywords: A list of keywords used to filter videos and comments when fetching data
+            by playlist. Used only when 'only_wow' is False. Its value defaults to KEYWORDS.
+        limit_channels: An optional integer specifying the limit on the number of channels
+            to be processed, based on their subscriber count. If None, no limit is applied.
 
-    Returns:
-        None
+    Raises:
+        QuotaExhaustedError: Raised if the YouTube API quota is exhausted during processing,
+            which halts further execution of the function.
     """
     if not isinstance(keywords, list):
         keywords = list(keywords)
@@ -979,14 +1079,16 @@ def process_channels(youtube, db, channels=CHANNELS, keywords=KEYWORDS, limit_ch
 
 def main():
     """
-    The main entry point for the YouTube comments fetching script.
+    Main function that initializes and processes data using YouTube API and database connection.
 
-    This function initializes the YouTube API client, establishes a connection to the
-    database, and initiates the process of fetching comments for the specified channels
-    based on configured keywords and limits.
+    This script performs the primary workflow by setting up access to the YouTube API
+    service, establishing a database connection, processing YouTube channel data, and
+    then gracefully shutting down logging services.
 
-    Returns:
-        None
+    Raises:
+        Any exception raised during the initialization, database connection management,
+        or data processing phases will propagate.
+
     """
     youtube_service = build_youtube_service()
     with DatabaseConnection() as db:
