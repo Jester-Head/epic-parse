@@ -9,6 +9,27 @@ import pymongo
 
 
 class DatabaseConnection:
+    """
+    Represents a connection to a MongoDB database and provides methods for managing and querying
+    comments and progress data.
+
+    This class provides functionality to connect to a MongoDB database, ensure the existence of indexes,
+    perform CRUD operations on a collection for comments, and handle progress data. It includes utility
+    methods to interact with the database in a structured manner.
+
+    Attributes:
+        mongo_uri (str): MongoDB URI used to connect to the database.
+        mongo_db (str): The name of the MongoDB database.
+        mongo_coll (str): The name of the MongoDB collection for comments.
+        client (pymongo.mongo_client.MongoClient or None): The MongoDB client
+            instance for database connection.
+        db (pymongo.database.Database or None): The MongoDB database object.
+        collection (pymongo.collection.Collection or None): The MongoDB collection
+            for managing comments.
+        progress_collection (pymongo.collection.Collection or None): The MongoDB collection
+            for tracking progress data.
+        logger (logging.Logger): Logger instance for event logging and debugging.
+    """
     def __init__(self, mongo_uri=MONGO_URI, mongo_db=MONGO_DB, mongo_coll=MONGO_COLL):
         """
         Initializes the DatabaseConnection with MongoDB URI, database name, and collection name.
@@ -212,7 +233,7 @@ class DatabaseConnection:
 
     def insert_comments(self, comments):
         """
-        Inserts multiple comments into the database collection (bulk upsert).
+        Inserts or updates multiple comments in the database collection (bulk upsert).
 
         Args:
             comments (list): A list of comment dictionaries.
@@ -234,18 +255,34 @@ class DatabaseConnection:
                 operations.append(
                     UpdateOne(
                         {"comment_id": comment["comment_id"]},
-                        {"$setOnInsert": comment},
+                        {"$set": {
+                            "video_id": comment["video_id"],
+                            "video_title": comment["video_title"],
+                            "channel_id": comment["channel_id"],
+                            "channel_name": comment["channel_name"],
+                            "author": comment["author"],
+                            "author_channel_id": comment.get("author_channel_id"),
+                            "text": comment["text"],
+                            "like_count": comment["like_count"],
+                            "published_at": comment["published_at"],
+                            "updated_at": comment["updated_at"],
+                        }},
                         upsert=True
                     )
                 )
             if operations:
+                self.logger.debug(
+                    f"Attempting to upsert {len(operations)} comments.")
                 result = self.collection.bulk_write(operations, ordered=False)
                 self.logger.info(
-                    f"Inserted {result.upserted_count} new comments.")
+                    f"Inserted {result.upserted_count} new comments. Bulk write result: {result.bulk_api_result}"
+                )
         except errors.BulkWriteError as bwe:
             self.logger.error(f"Bulk write error: {bwe.details}")
         except errors.PyMongoError as e:
             self.logger.error(f"Failed to insert comments: {e}")
+
+
 
     def get_progress(self, video_id):
         """
