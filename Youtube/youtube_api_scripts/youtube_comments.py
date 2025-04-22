@@ -273,7 +273,7 @@ def fetch_video_metadata(youtube, video_id, channel_id):
     Fetches metadata for a YouTube video, including its title and the channel name.
 
     This function retrieves video metadata such as the video title and channel name
-    from the YouTube Data API. It utilizes caching mechanisms to reduce redundant
+    from the YouTube Data API. It uses caching mechanisms to reduce redundant
     API requests. If metadata for a given video ID is already cached, it is retrieved
     from the local cache instead of sending a new API request. Similarly, channel
     names are also cached to avoid repetitive API calls. If metadata cannot be
@@ -716,7 +716,7 @@ def get_all_channel_comments(youtube, channel_id, db, max_results=100):
             enriched_comments = []
 
             for comment in comments:
-                # Extract necessary fields from the comment thread
+                # Extract the necessary fields from the comment thread
                 comment_data = comment["snippet"]["topLevelComment"]["snippet"]
                 # Changed from "videoId" to "video_id"
                 video_id = comment_data.get("videoId")
@@ -1093,9 +1093,6 @@ def main():
     This function initializes the required YouTube service, establishes a connection
     to the database using the context manager, and handles channel data processing.
     It ensures proper closure of the logging system upon script completion.
-
-    Args:
-        None
 
     Returns:
         None

@@ -32,20 +32,34 @@ CHANNELS = {
         "only_wow": True,
         "version": "retail"
     },
-    'Asmongold':  # Reacts to various content. Influential,kinda controversial and critical of Blizzard
+    "Tettles":
     {
-        'handle': '@asmontv',
-        'channel_id': 'UCQeRaTukNYft1_6AZPACnog',
-        'only_wow': False,
-        'version': 'both'
-    },
-    "Preach Gaming":  # Variety of content including WoW. Used to be high end raider
-    {
-        "handle": "@preachgaming",
-        "channel_id": "UCXJL3ST-O0J3nqzQyPJtpNg",
-        "only_wow": False,
+        "handle": "@tettles",
+        "channel_id": "UCQxhna2XRWA_Pts6abbpEIg",
+        "only_wow": True,
         "version": "retail"
     },
+    "The PoddyC":
+    {
+        "handle": "@thepoddyc",
+        "channel_id": "UCBpQpzCDJfeW3zIccmZwMVw",
+        "only_wow": True,
+        "version": "retail"
+    },
+    # 'Asmongold': # Reacts to various content. Influential,kinda controversial and critical of Blizzard
+    # {
+    #     'handle': '@asmontv',
+    #     'channel_id': 'UCQeRaTukNYft1_6AZPACnog',
+    #     'only_wow': False,
+    #     'version': 'both'
+    # },
+    # "Preach Gaming": # Variety of content including WoW. Used to be high end raider
+    # {
+    #     "handle": "@preachgaming",
+    #     "channel_id": "UCXJL3ST-O0J3nqzQyPJtpNg",
+    #     "only_wow": False,
+    #     "version": "retail"
+    # },
     "Taliesin & Evitel":  # WoW News and Lore. Casual content
     {
         "handle": "@taliesinevitel",
@@ -53,27 +67,34 @@ CHANNELS = {
         "only_wow": False,
         "version": "retail"
     },
-    "Nobbel87":  # Lore
+    # "Nobbel87": # Lore
+    # {
+    #     "handle": "@nobbel87",
+    #     "channel_id": "UCX34tk-noBVC4WVC9qQGyMw",
+    #     "only_wow": True,
+    #     "version": "retail"
+    # },
+    # "Hazelnuttygames":  # Not as active anymore
+    # {
+    #     "handle": "@hazelnuttygames",
+    #     "channel_id": "UCMGVp_GnkhHZROIfRdXpo4Q",
+    #     "only_wow": False,
+    #     "version": "retail"
+    # },
+    "MarcelianOnline":
     {
-        "handle": "@nobbel87",
-        "channel_id": "UCX34tk-noBVC4WVC9qQGyMw",
+        "handle": "@marcelianonline",
+        "channel_id": "UCyf0SCaSGhKpvI_azfvidUw",
         "only_wow": True,
         "version": "retail"
     },
-    "Hazelnuttygames":  # Not as active anymore
-    {
-        "handle": "@hazelnuttygames",
-        "channel_id": "UCMGVp_GnkhHZROIfRdXpo4Q",
-        "only_wow": False,
-        "version": "retail"
-    },
-    "Accolonn":
-    {
-        "handle": "@theaccolonn",
-        "channel_id": "UCiYLmBHW28jyTt0vBUFuK5A",
-        "only_wow": True,
-        "version": "retail"
-    },
+    # "Accolonn":
+    # {
+    #     "handle": "@theaccolonn",
+    #     "channel_id": "UCiYLmBHW28jyTt0vBUFuK5A",
+    #     "only_wow": True,
+    #     "version": "retail"
+    # },
     "SoulSoBreezy":
     {
         "handle": "@soulsobreezy",
@@ -136,24 +157,17 @@ CHANNELS = {
         "only_wow": True,
         "version": "retail"
     },
-    "Naguura":  # DPS M+ PoV
-    {
-        "handle": "@naguura",
-        "channel_id": "UC9hQOoOtN-xaUjPn1jWzsWQ",
-        "only_wow": False,
-        "version": "retail"
-    },
+    # "Naguura": # DPS M+ PoV
+    # {
+    #     "handle": "@naguura",
+    #     "channel_id": "UC9hQOoOtN-xaUjPn1jWzsWQ",
+    #     "only_wow": False,
+    #     "version": "retail"
+    # },
     "Dratnos":
     {
         "handle": "@dratnos",
         "channel_id": "UCI-FRT31iq5_xoFG6ngNcpw",
-        "only_wow": True,
-        "version": "retail"
-    },
-    "MarcelianOnline":
-    {
-        "handle": "@marcelianonline",
-        "channel_id": "UCyf0SCaSGhKpvI_azfvidUw",
         "only_wow": True,
         "version": "retail"
     },
@@ -193,21 +207,20 @@ CHANNELS = {
         "only_wow": True,
         "version": "retail"
     },
-
-    "Xaryu":  # Classic WoW/Hardcore
-    {
-        "handle": "@xaryu",
-        "channel_id": "UCAbaiKvP8kZfY706loT4ivg",
-        "only_wow": False,
-        "version": "classic"
-    },
-    "Wille":  # General Classic WoW Content
-    {
-        "handle": "@willemmo",
-        "channel_id": "UC1haxYclmhXwa4FKFqYSaRw",
-        "only_wow": True,
-        "version": "classic"
-    },
+    # "Xaryu": # Classic WoW/Hardcore
+    # {
+    #     "handle": "@xaryu",
+    #     "channel_id": "UCAbaiKvP8kZfY706loT4ivg",
+    #     "only_wow": False,
+    #     "version": "classic"
+    # },
+    # "Wille": # General Classic WoW Content
+    # {
+    #     "handle": "@willemmo",
+    #     "channel_id": "UC1haxYclmhXwa4FKFqYSaRw",
+    #     "only_wow": True,
+    #     "version": "classic"
+    # },
     "Scottejaye":  # General WoW Content
     {
         "handle": "@scottejaye",

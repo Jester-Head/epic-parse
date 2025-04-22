@@ -1,4 +1,3 @@
-Crawler
 .vscode
 __pycache__
 config.py
@@ -13,3 +12,11 @@ Youtube/youtube_api_scripts/logging_config.json
 /highlighted_code.html
 /.idea
 /Youtube/yt_cache
+/Crawler/data
+/Crawler/yt_cache
+/Crawler/tests
+/utils/config.py
+/Youtube/.idea
+/Crawler/utilities
+/Crawler/notebooks
+/Crawler/crawler/settings.py
