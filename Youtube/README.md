@@ -58,7 +58,7 @@ caching, and retry mechanisms.
 python main.py
 
 # Filter by channel types
-python main.py --types "tech,gaming"
+python main.py --types "lore,news"
 
 # Verify channel still exists and is active
 python main.py --verify-channels
