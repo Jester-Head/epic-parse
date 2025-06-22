@@ -8,7 +8,7 @@ logs
 video_metadata_cache.json
 channel_metadata_cache.json
 private_files
-Youtube/youtube_api_scripts/logging_config.json
+log/logging_config.json
 /highlighted_code.html
 /.idea
 /Youtube/yt_cache
@@ -20,3 +20,4 @@ Youtube/youtube_api_scripts/logging_config.json
 /Crawler/utilities
 /Crawler/notebooks
 /Crawler/crawler/settings.py
+/Youtube/one_file_scrape.py

@@ -1,3 +1,2 @@
-google_api_python_client==2.157.0
-pymongo==4.10.1
-python_dateutil==2.9.0.post0
+google-api-python-client>=2.0.0
+python-dateutil>=2.8.0

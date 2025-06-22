@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "console": {
+      "format": "%(asctime)s | %(levelname)-7s | %(message)s",
+      "datefmt": "%H:%M:%S"
+    },
+    "detailed": {
+      "format": "%(asctime)s | %(levelname)-7s | %(name)s:%(lineno)d | %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S"
+    }
+  },
+  "handlers": {
+    "console": {
+      "class": "logging.StreamHandler",
+      "level": "INFO",
+      "formatter": "console",
+      "stream": "ext://sys.stdout"
+    },
+    "file": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "level": "DEBUG",
+      "formatter": "detailed",
+      "filename": "logs/youtube.log",
+      "mode": "a",
+      "maxBytes": 10485760,
+      "backupCount": 3,
+      "encoding": "utf-8"
+    }
+  },
+  "root": {
+    "handlers": [
+      "console",
+      "file"
+    ],
+    "level": "DEBUG"
+  }
+}
