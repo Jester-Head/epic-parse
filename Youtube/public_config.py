@@ -1,14 +1,24 @@
+# File: Youtube/public_config.py
+
 # Rename this file to config.py and fill in the necessary information
 # This file contains the configuration for the YouTube API and MongoDB
 
+# List of API keys for accessing the YouTube API.
 API_KEYS = ['your_api_keys']
+
+# MongoDB connection URI.
 MONGO_URI = "mongodb://your_mongo_uri"
+
+# Name of the MongoDB database.
 MONGO_DB = "your_mongo_db"
+
+# Name of the MongoDB collection.
 MONGO_COLL = "your_mongo_collection"
 
-# Battle for Azeroth release date
+# Cutoff date for filtering YouTube data, representing the Battle for Azeroth release date.
 CUTOFF_DATE = '2018-08-14T00:00:00Z'
 
+# Set of keywords used for filtering YouTube playlists and videos.
 KEYWORDS = {'BFA', 'Battle for Azeroth', 'Blizzard', 'Cata', 'Cataclysm', 'Cinematic', 'Classic', 'Classic WoW',
             'Cutscene', 'Dragonflight', 'Dungeon',
             'Legion', 'Lore', 'MDI', 'Meta', 'Mists of Pandaria', 'MoP', 'Mythic', 'Mythic+', 'Patch', 'PvE',
@@ -17,8 +27,17 @@ KEYWORDS = {'BFA', 'Battle for Azeroth', 'Blizzard', 'Cata', 'Cataclysm', 'Cinem
             'World of Lorecraft',
             'World of Warcraft', 'World Soul Saga' 'WotLK', 'Wrath of the Lich King'}
 
+# Path to the logging configuration file.
 LOG_CONFIG_PATH = 'Youtube/logging_config.json'
 
+# Dictionary containing information about YouTube channels to process.
+# Each channel entry includes:
+# - handle: The YouTube handle of the channel.
+# - channel_id: The unique ID of the channel.
+# - only_wow: A boolean indicating if the channel is exclusively related to World of Warcraft.
+# - version: The version of World of Warcraft content (e.g., retail, classic, both).
+# - tags: A list of tags describing the channel's content.
+# - outdated: A boolean indicating if the channel is outdated.
 CHANNELS = {
     # ---------------------- A ---------------------- #
     "Accolonn": {

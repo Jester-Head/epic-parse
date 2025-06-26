@@ -1,10 +1,9 @@
-# ==============================================================================
-# File: core/processor.py
-# ==============================================================================
-import logging
-from typing import Dict, List
+# File: Youtube/core/processor.py
 
-from Youtube.config import CUTOFF_DATE, KEYWORDS, CHANNELS
+import logging
+from typing import List, Dict
+
+from config import CUTOFF_DATE, CHANNELS, KEYWORDS
 
 logger = logging.getLogger(__name__)
 
@@ -13,21 +12,22 @@ class YouTubeProcessor:
     """
     Processes YouTube data including metadata, comments, channels, and playlists.
 
-    This class provides functionalities to retrieve, process, and store information
-    related to YouTube comments, playlists, and channel information. The primary
-    use case involves fetching comments from both individual playlists and all
-    videos in a channel, while persisting progress and results in a database.
-
-    Attributes:
-        youtube_client: The client interface for interacting with the YouTube API.
-        metadata: Manager for handling video metadata retrieval and processing.
-        comments: Manager for fetching and processing YouTube video comments.
-        channels: Manager for handling YouTube channel-related operations.
-        playlists: Manager for handling YouTube playlist-related operations.
+    This class provides methods to fetch and process comments from playlists and channels,
+    as well as to handle batch processing of multiple channels.
     """
 
     def __init__(self, youtube_client, metadata_manager, comment_manager,
                  channel_manager, playlist_manager):
+        """
+        Initializes the YouTubeProcessor with required managers and a YouTube API client.
+
+        Args:
+            youtube_client: The YouTube API client instance.
+            metadata_manager: An instance of MetadataManager for handling video metadata.
+            comment_manager: An instance of CommentManager for managing comments.
+            channel_manager: An instance of ChannelManager for managing channel-related operations.
+            playlist_manager: An instance of PlaylistManager for handling playlists.
+        """
         self.youtube_client = youtube_client
         self.metadata = metadata_manager
         self.comments = comment_manager
@@ -35,7 +35,17 @@ class YouTubeProcessor:
         self.playlists = playlist_manager
 
     def get_comments_by_playlist(self, channel_id: str, db, keywords: List[str]):
-        """Fetch comments from playlist videos."""
+        """
+        Fetches comments from videos in playlists matching the given keywords.
+
+        Args:
+            channel_id (str): The ID of the channel to fetch playlists from.
+            db: The database instance for storing comments.
+            keywords (List[str]): A list of keywords to search for matching playlists.
+
+        Returns:
+            None
+        """
         processed = set()
         playlists = self.playlists.cached_search_playlists(self.youtube_client, channel_id, keywords)
 
@@ -50,7 +60,6 @@ class YouTubeProcessor:
                     if vid in processed:
                         continue
                     processed.add(vid)
-
                     res = self.comments.fetch_comments_with_resume(
                         self.youtube_client, vid, channel_id, db,
                         max_results=100, initial_fetch_date=CUTOFF_DATE
@@ -61,7 +70,18 @@ class YouTubeProcessor:
                 logger.error("Error processing playlist %s: %s", pl_id, exc)
 
     def get_all_channel_comments(self, channel_id: str, db, max_results: int = 100, cutoff_date=CUTOFF_DATE):
-        """Fetch all comments from a channel."""
+        """
+        Fetches all comments from a channel, starting from the cutoff date.
+
+        Args:
+            channel_id (str): The ID of the channel to fetch comments from.
+            db: The database instance for storing comments and progress.
+            max_results (int): The maximum number of comments to fetch per page. Defaults to 100.
+            cutoff_date: The date to start fetching comments from. Defaults to CUTOFF_DATE.
+
+        Returns:
+            None
+        """
         from datetime import datetime, timezone
         from dateutil.parser import parse
 
@@ -75,8 +95,16 @@ class YouTubeProcessor:
             logger.debug("Channel %s up-to-date; skipping", channel_id)
             return
 
-        # Get channel name
         def _chan_req(svc):
+            """
+            Constructs the API request for fetching channel information.
+
+            Args:
+                svc: The YouTube API service instance.
+
+            Returns:
+                The API request object.
+            """
             return svc.channels().list(part="snippet", id=channel_id, maxResults=1)
 
         c_resp, service = self.youtube_client.retry_request(_chan_req)
@@ -86,9 +114,17 @@ class YouTubeProcessor:
 
         chan_name = c_resp["items"][0]["snippet"]["title"]
 
-        # Main page loop
         while True:
             def _page_req(svc):
+                """
+                Constructs the API request for fetching comments from a channel.
+
+                Args:
+                    svc: The YouTube API service instance.
+
+                Returns:
+                    The API request object.
+                """
                 return svc.commentThreads().list(
                     part="snippet",
                     allThreadsRelatedToChannelId=channel_id,
@@ -149,7 +185,17 @@ class YouTubeProcessor:
                 break
 
     def process_channels(self, db, channels: Dict = None, keywords: List[str] = None):
-        """Process a list of channels."""
+        """
+        Processes a list of channels by fetching comments from playlists or all channel videos.
+
+        Args:
+            db: The database instance for storing comments and progress.
+            channels (Dict, optional): A dictionary of channel names and their information. Defaults to CHANNELS.
+            keywords (List[str], optional): A list of keywords for playlist search. Defaults to KEYWORDS.
+
+        Returns:
+            None
+        """
         channels = channels or CHANNELS
         keywords = keywords if isinstance(keywords, list) else list(keywords or KEYWORDS)
 

@@ -2,8 +2,8 @@
 
 ## Overview
 
-A YouTube comment scraper that efficiently fetches comments from YouTube channels and playlists with advanced filtering,
-caching, and retry mechanisms.
+A YouTube comment scraper that fetches comments from YouTube channels and playlists with advanced filtering,
+caching.
 
 ## Structure
 
@@ -35,7 +35,7 @@ caching, and retry mechanisms.
 
 ### API Management
 
-- **Quota Handling**: Automatic API key rotation when quotas are exhausted (**NOT RECOMMENDED—USE AT YOUR OWN RISK**)
+- **Quota Handling**: Automatic API key rotation when quotas are exhausted (**ROTATION NOT RECOMMENDED**)
 - **Retry Logic**: Exponential backoff for transient errors
 - **Rate Limiting**: Respect API rate limits
 
@@ -58,13 +58,13 @@ caching, and retry mechanisms.
 python main.py
 
 # Filter by channel types
-python main.py --types "tech,gaming"
+python main.py --types news,lore
 
 # Verify channel still exists and is active
 python main.py --verify-channels
 
 # Process specific channels
-python main.py --channels "channel1,channel2"
+python main.py --channels channel1,channel2
 
 # Exclude inactive channels
 python main.py --max-inactive-days 30
@@ -75,7 +75,7 @@ python main.py --max-inactive-days 30
 Create a `config.py` file with:
 
 ```python
-API_KEYS = ["your_api_key_1", "your_api_key_2"]
+API_KEYS = ["your_api_key_1", "your_api_key_2"]  # This works with one key. Add more keys at your own risk. 
 CHANNELS = {
     "channel_name": {
         "channel_id": "UC...",

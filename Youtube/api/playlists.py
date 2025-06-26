@@ -1,10 +1,12 @@
+# File: Youtube/api/playlists.py
+
 import json
 import logging
 import os
 import pathlib
 from typing import List, Tuple, Optional
 
-from Youtube.api.metadata import MetadataManager
+from api.metadata import MetadataManager
 
 logger = logging.getLogger(__name__)
 
@@ -13,24 +15,22 @@ class PlaylistManager:
     """
     Manages playlists and videos using YouTube API interactions.
 
-    The PlaylistManager class provides utilities for interacting with YouTube APIs
-    to search, fetch, and cache playlists and videos. It supports searching within
-    channels, generating playlists based on keywords, retrieving videos from
-    playlists, and caching search results for efficient reuse.
+    This class provides methods to generate playlists, search for videos within
+    a channel, and retrieve video IDs from playlists. It also supports caching
+    playlist search results for efficiency.
 
     Attributes:
-        metadata (MetadataManager | None): Metadata manager used for fetching
-            additional video information such as title, channel name, and publish
-            date.
+        metadata (Optional[MetadataManager]): An instance of MetadataManager to
+            fetch video metadata.
     """
 
-    def __init__(self, metadata_manager: Optional["MetadataManager"] = None):
+    def __init__(self, metadata_manager: Optional[MetadataManager] = None):
         """
-        Parameters
-        ----------
-        metadata_manager : MetadataManager | None
-            If provided, will be used to look up title, channel name and
-            publish date for every video that is yielded.
+        Initializes the PlaylistManager.
+
+        Args:
+            metadata_manager (Optional[MetadataManager]): An optional instance of
+                MetadataManager for fetching video metadata.
         """
         self.metadata = metadata_manager
 
@@ -41,7 +41,20 @@ class PlaylistManager:
             keyword: str,
             max_results: int = 50,
     ):
-        """Generate videos by searching within a channel."""
+        """
+        Searches for videos in a channel based on a keyword.
+
+        Args:
+            youtube_client: The YouTube API client used to perform the search.
+            channel_id (str): The ID of the channel to search within.
+            keyword (str): The keyword to search for.
+            max_results (int): The maximum number of results per page. Defaults to 50.
+
+        Yields:
+            Tuple: A tuple containing video ID, YouTube service, video title,
+            channel name, and publish date if metadata is available. Otherwise,
+            yields video ID and YouTube service.
+        """
         page_token = None
         while True:
             def _req(svc):
@@ -61,7 +74,6 @@ class PlaylistManager:
 
             for item in resp.get("items", []):
                 vid = item["id"]["videoId"]
-
                 if self.metadata is not None:
                     v_title, ch_name, pub_dt, _ = self.metadata.fetch_video_metadata(
                         youtube_client, vid
@@ -78,7 +90,18 @@ class PlaylistManager:
 
     @staticmethod
     def generate_playlists(youtube_client, channel_id: str, keywords: List[str], max_results: int = 10):
-        """Generate playlists matching keywords."""
+        """
+        Generates playlists from a channel that match specific keywords.
+
+        Args:
+            youtube_client: The YouTube API client used to fetch playlists.
+            channel_id (str): The ID of the channel to fetch playlists from.
+            keywords (List[str]): A list of keywords to filter playlists.
+            max_results (int): The maximum number of results per page. Defaults to 10.
+
+        Yields:
+            Tuple[str, str]: A tuple containing playlist ID and playlist title.
+        """
         page_token = None
         while True:
             def _req(svc):
@@ -104,7 +127,17 @@ class PlaylistManager:
 
     @staticmethod
     def generate_videos(youtube_client, playlist_id: str, max_results: int = 50):
-        """Generate video IDs from a playlist."""
+        """
+        Retrieves video IDs from a playlist.
+
+        Args:
+            youtube_client: The YouTube API client used to fetch playlist items.
+            playlist_id (str): The ID of the playlist to fetch videos from.
+            max_results (int): The maximum number of results per page. Defaults to 50.
+
+        Yields:
+            str: The video ID of each video in the playlist.
+        """
         page_token = None
         while True:
             def _req(svc):
@@ -127,14 +160,23 @@ class PlaylistManager:
                 break
 
     def cached_search_playlists(self, youtube_client, channel_id: str, keywords: List[str]) -> List[Tuple[str, str]]:
-        """Cache and retrieve playlists based on keywords."""
+        """
+        Searches for playlists matching keywords and caches the results.
+
+        Args:
+            youtube_client: The YouTube API client used to perform the search.
+            channel_id (str): The ID of the channel to search within.
+            keywords (List[str]): A list of keywords to filter playlists.
+
+        Returns:
+            List[Tuple[str, str]]: A list of tuples containing playlist IDs and titles.
+        """
         cache_file = f"yt_cache/pl_{channel_id}.json"
         if os.path.exists(cache_file):
             with open(cache_file, "r", encoding="utf-8") as fp:
                 return json.load(fp)
 
         playlists = list(self.generate_playlists(youtube_client, channel_id, keywords))
-
         if not playlists:
             def _search_req(svc):
                 return svc.search().list(

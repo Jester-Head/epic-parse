@@ -29,6 +29,17 @@ class DatabaseConnection:
     """
 
     def __init__(self, mongo_uri=MONGO_URI, mongo_db=MONGO_DB, mongo_coll=MONGO_COLL):
+        """
+        Initializes the DatabaseConnection instance.
+
+        Args:
+            mongo_uri (str): The connection URI for the MongoDB instance.
+            mongo_db (str): The name of the MongoDB database to connect to.
+            mongo_coll (str): The name of the primary collection within the MongoDB database.
+
+        Raises:
+            ValueError: If any of the required parameters are not provided.
+        """
         if not mongo_uri:
             raise ValueError("MONGO_URI must be provided")
         if not mongo_db:
@@ -49,7 +60,12 @@ class DatabaseConnection:
         self.connect()
 
     def connect(self):
-        """Open the connection and create required indexes."""
+        """
+        Establishes the connection to the MongoDB instance and creates required indexes.
+
+        Raises:
+            PyMongoError: If there is an error during connection or index creation.
+        """
         try:
             self.client = MongoClient(self.mongo_uri, serverSelectionTimeoutMS=5000)
             self.db = self.client[self.mongo_db]
@@ -105,8 +121,17 @@ class DatabaseConnection:
             self.logger.error("DB connection/index error: %s", exc)
             raise exc
 
-    #  Index management
     def ensure_index(self, collection, keys, unique, name, sparse=False):
+        """
+        Ensures the specified index exists in the given collection.
+
+        Args:
+            collection (Collection): The MongoDB collection to create the index on.
+            keys (list): The keys for the index.
+            unique (bool): Whether the index should enforce uniqueness.
+            name (str): The name of the index.
+            sparse (bool, optional): Whether the index should be sparse. Defaults to False.
+        """
         existing = collection.index_information()
         if name in existing:
             idx = existing[name]
@@ -118,8 +143,17 @@ class DatabaseConnection:
         collection.create_index(keys, unique=unique, name=name, sparse=sparse)
         self.logger.info("Created index %s", name)
 
-    #  Comment helpers
     def get_most_recent_comment(self, channel_id, video_id):
+        """
+        Retrieves the most recent comment for the specified channel and video.
+
+        Args:
+            channel_id (str): The ID of the channel.
+            video_id (str): The ID of the video.
+
+        Returns:
+            dict or None: The most recent comment document, or None if an error occurs.
+        """
         try:
             return self.collection.find_one(
                 {"channel_id": channel_id, "video_id": video_id},
@@ -131,14 +165,18 @@ class DatabaseConnection:
 
     def insert_comments(self, comments: list):
         """
-        Bulk upsert.  Each document now writes `video_publish_date`.
-        Robust against missing keys, oversize batches, and logs full result stats.
+        Inserts or updates a batch of comments in the database.
+
+        Args:
+            comments (list): A list of comment dictionaries to insert or update.
+
+        Logs:
+            Information about the number of upserted, matched, and modified documents.
         """
         if not isinstance(comments, list):
             self.logger.warning("insert_comments expects a list.")
             return
 
-        # Build operations in batches of 1 000 to stay under Mongo limits
         batch, total_upserted, total_matched, total_modified = [], 0, 0, 0
         required_keys = {
             "comment_id", "video_id", "video_title", "channel_id",
@@ -196,13 +234,15 @@ class DatabaseConnection:
             total_upserted, total_matched, total_modified
         )
 
-    #  Progress helpers (video- or channel-level)
-
     def get_progress(self, key: str):
         """
-        Return the stored page token for *key* (_id in the progress collection).
-        • key can be a video ID (“dQw4w9…”) or a channel sentinel (“chan::UCxyz”).
-        • Returns None if the row doesn’t exist OR if the token is the sentinel.
+        Retrieves the stored page token for the specified key.
+
+        Args:
+            key (str): The key to look up in the progress collection.
+
+        Returns:
+            str or None: The page token, or None if the key does not exist or the token is the sentinel.
         """
         try:
             row = self.progress_collection.find_one({"_id": key})
@@ -212,7 +252,15 @@ class DatabaseConnection:
             return None
 
     def progress_exists(self, key: str) -> bool:
-        """True if a progress document with *_id == key* already exists."""
+        """
+        Checks if a progress document with the specified key exists.
+
+        Args:
+            key (str): The key to check in the progress collection.
+
+        Returns:
+            bool: True if the document exists, False otherwise.
+        """
         try:
             return self.progress_collection.count_documents({"_id": key}, limit=1) == 1
         except errors.PyMongoError as exc:
@@ -221,7 +269,11 @@ class DatabaseConnection:
 
     def save_progress(self, key: str, page_token):
         """
-        Upsert a progress row.  Use *page_token=None* as the “all caught up” sentinel.
+        Saves or updates a progress document with the specified key and page token.
+
+        Args:
+            key (str): The key for the progress document.
+            page_token (str or None): The page token to save. Use None to indicate "all caught up."
         """
         try:
             self.progress_collection.update_one(
@@ -235,9 +287,13 @@ class DatabaseConnection:
         except errors.PyMongoError as exc:
             self.logger.error("save_progress failed: %s", exc)
 
-    #  Context-manager plumbing
-
     def close_connection(self):
+        """
+        Closes the MongoDB connection.
+
+        Logs:
+            Information about the connection closure or errors during the process.
+        """
         if self.client:
             try:
                 self.client.close()
@@ -246,7 +302,16 @@ class DatabaseConnection:
                 self.logger.error("Error closing Mongo connection: %s", exc)
 
     def __enter__(self):
+        """
+        Context manager entry method.
+
+        Returns:
+            DatabaseConnection: The current instance.
+        """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Context manager exit method. Closes the MongoDB connection.
+        """
         self.close_connection()

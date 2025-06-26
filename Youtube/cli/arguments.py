@@ -1,4 +1,4 @@
-# File: cli/arguments.py
+# File: arguments.py
 import argparse
 
 
@@ -7,13 +7,13 @@ def parse_cli() -> argparse.Namespace:
     Parses command-line arguments for a YouTube comment scraper that allows flexible filtering and
     selection of YouTube channels based on various criteria.
 
-    This function creates and configures an instance of `argparse.ArgumentParser` to provide several
+    This function creates and configures an instance of `ArgumentParser` to provide several
     options for filtering channels, such as inclusion by name, exclusion by name, filtering by channel
     tags, and limiting based on subscriber count or inactivity. Additionally, it includes options to
     validate the health of channels.
 
     Returns:
-        argparse.Namespace: The parsed arguments as a namespace object, containing all the command-line
+        Namespace: The parsed arguments as a namespace object, containing all the command-line
         options and their respective values. The namespace provides access to user input for filtering
         and processing YouTube channels.
     """
@@ -47,6 +47,12 @@ def parse_cli() -> argparse.Namespace:
         metavar="N",
         help="Keep only the top-N channels by subscriber count "
              "(after previous filters, before --skip / --exclude-types).",
+    )
+    p.add_argument(
+        "--limit-bottom",
+        type=int,
+        metavar="N",
+        help="Keep only the bottom-N channels by subscriber count (after previous filters, before --skip / --exclude-types).",
     )
     p.add_argument(
         "--max-inactive-days",
