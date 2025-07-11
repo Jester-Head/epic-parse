@@ -105,7 +105,11 @@ class WoWForumsLoader(ItemLoader):
                 'comment_text': soup.get_text().strip()
             }
 
-        except Exception as e:
+        except (ValueError, AttributeError, TypeError) as e:
+            # Log specific parsing errors and return fallback values
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error parsing HTML content: {e}")
             return {'quoted_text': [], 'comment_text': value}
 
     @staticmethod
