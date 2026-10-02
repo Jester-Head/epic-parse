@@ -206,9 +206,19 @@ class WoWForumsSpider(scrapy.Spider):
                 self.logger.info(f"Following next link: {next_link}")
                 yield response.follow(next_link, callback=self.parse_thread_html)
 
-        except Exception as e:
+        except (json.JSONDecodeError, KeyError) as e:
             self.logger.error(
-                f"Error parsing API response for thread {response.meta['thread_id']}: {e}"
+                f"JSON parsing error for thread {response.meta['thread_id']}: {e}"
+            )
+        except (AttributeError, TypeError) as e:
+            self.logger.error(
+                f"Data structure error for thread {response.meta['thread_id']}: {e}"
+            )
+        except Exception as e:
+            # Only catch truly unexpected exceptions and provide more detailed logging
+            self.logger.error(
+                f"Unexpected error parsing thread {response.meta['thread_id']}: {type(e).__name__}: {e}",
+                exc_info=True
             )
 
     @staticmethod
