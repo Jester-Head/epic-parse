@@ -4,31 +4,39 @@ from pymongo import errors
 
 
 class DatabasePipeline:
-    def __init__(self, mongo_uri, mongo_db, mongo_coll):
-        self.mongo_uri = mongo_uri
-        self.mongo_db = mongo_db
-        self.mongo_coll = mongo_coll
+    """
+    Manages database operations for processing items in a web scraping pipeline.
+
+    This class facilitates interaction with a MongoDB database by handling item
+    inserts and updates. Primarily used in conjunction with a web scraping
+    framework, this class ensures accurate data storage and prevents duplication by
+    leveraging unique indexes.
+
+    Attributes:
+        client (pymongo.MongoClient): MongoDB client for database connection.
+        db (pymongo.database.Database): MongoDB database instance.
+        collection (pymongo.collection.Collection): MongoDB collection instance.
+    """
+
+    def __init__(self, mongo_uri, mongo_db, mongo_collection):
+        self.client = pymongo.MongoClient(mongo_uri)
+        self.db = self.client[mongo_db]
+        self.collection = self.db[mongo_collection]
 
     @classmethod
     def from_crawler(cls, crawler):
         return cls(
             mongo_uri=crawler.settings.get("MONGO_URI"),
             mongo_db=crawler.settings.get("MONGO_DATABASE", "default_db"),
-            mongo_coll=crawler.settings.get(
-                "MONGO_COLL_FORUMS", "default_collection"),
+            mongo_collection=crawler.settings.get("MONGO_COLL_FORUMS", "default_collection"),
         )
 
     def open_spider(self, spider):
-        self.client = pymongo.MongoClient(self.mongo_uri)
-        self.db = self.client[self.mongo_db]
-        self.collection = self.db[self.mongo_coll]
-
-        # Create a unique compound index for identifying unique comments.
         try:
-            self.collection.create_index([
-                ("thread_id", 1),
-                ("post_id", 1),
-            ], unique=True)
+            self.collection.create_index(
+                [("thread_id", 1), ("post_id", 1)],
+                unique=True,
+            )
         except errors.OperationFailure as e:
             spider.logger.error(f"Error creating index: {e}")
 
@@ -37,42 +45,41 @@ class DatabasePipeline:
 
     def process_item(self, item, spider):
         """
-        Process each item, either inserting a new post or updating an existing one
+        Process each item by either inserting a new post or updating an existing one
         if the number of likes or replies has changed.
         """
         item_dict = ItemAdapter(item).asdict()
-        # spider.logger.info(f"Attempting DB insert for item: {item}")
-
         query = {
             "thread_id": item_dict.get("thread_id"),
             "post_id": item_dict.get("post_id"),
         }
-
-        update_data = {
+        updated_fields = {
             "likes": item_dict.get("likes"),
             "reply_count": item_dict.get("reply_count"),
             "date_updated": item_dict.get("date_updated"),
         }
-
         try:
-            # Check if the document already exists
             existing_document = self.collection.find_one(query)
             if existing_document:
-                # Check if the likes or reply_count have changed
-                if (
-                    existing_document.get("likes") != item_dict.get("likes")
-                    or existing_document.get("reply_count") != item_dict.get("reply_count")
-                ):
-                    # Update the document if the relevant fields have changed
-                    self.collection.update_one(query, {"$set": update_data})
-                    spider.logger.info(
-                        f"Updated post: Thread ID {query['thread_id']}, Post ID {query['post_id']}")
+                if self._has_relevant_changes(existing_document, updated_fields):
+                    self._update_document(query, updated_fields, spider)
             else:
-                # Insert the document if it doesn't exist
                 self.collection.insert_one(item_dict)
                 spider.logger.info(
-                    f"DB insert SUCCESS for Thread ID {query['thread_id']}, Post ID {query['post_id']}")
+                    f"DB insert SUCCESS for Thread ID {query['thread_id']}, Post ID {query['post_id']}"
+                )
         except Exception as e:
             spider.logger.error(f"Error processing item: {e}")
-
         return item
+
+    def _has_relevant_changes(self, existing_document: dict, updated_fields: dict) -> bool:
+        return (
+                existing_document.get("likes") != updated_fields.get("likes")
+                or existing_document.get("reply_count") != updated_fields.get("reply_count")
+        )
+
+    def _update_document(self, query: dict, updated_fields: dict, spider) -> None:
+        self.collection.update_one(query, {"$set": updated_fields})
+        spider.logger.info(
+            f"Updated post: Thread ID {query['thread_id']}, Post ID {query['post_id']}"
+        )

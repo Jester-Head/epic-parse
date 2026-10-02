@@ -1,7 +1,7 @@
 from datetime import datetime
+
 from itemadapter import ItemAdapter
 
-# Retail expansions and patches
 retail_patches = {
     "Battle for Azeroth": {
         "start": "2018-08-14",
@@ -56,6 +56,7 @@ retail_patches = {
             "11.0.7": "2024-12-17",
             "11.1.0": "2025-02-25",
             "11.1.5": "2025-04-22",
+            "11.1.7": "2025-06-17",
         }
     }
 }
@@ -121,38 +122,37 @@ forum_expansion_map = {
 
 class WoWPatchPipeline:
     """
-    Pipeline to determine the game version, expansion, and patch for a forum post
-    based on its creation date and forum name.
+    Pipeline for processing items related to World of Warcraft (WoW) forum data.
+
+    This class is designed to handle WoW forum data items and enrich them with relevant
+    attributes such as game version, expansion name, and patch version based on the
+    forum name and post date. The pipeline determines whether the data corresponds to
+    the 'classic' or 'retail' game version and performs processing accordingly.
+
+    Attributes:
+        forum_expansion_map (dict): Maps forum name patterns to their respective WoW expansions for classic versions.
+        classic_patches (dict): Contains data about classic WoW expansions and their patch details, including start and
+            end dates.
+        retail_patches (dict): Contains data about retail WoW expansions and their patch details, including start and
+            end dates.
     """
 
     def process_item(self, item, spider):
-        """
-        Process an item to determine its game version, expansion, and patch.
-
-        Args:
-            item (dict): The forum post item.
-            spider (Spider): The spider instance.
-
-        Returns:
-            dict: The updated item with game_version, expansion_name, and patch_version.
-        """
         adapter = ItemAdapter(item)
         forum_name = adapter.get('forum_name', '')
         date_str = adapter.get('date_created')
 
         if not date_str:
-            return item  # Cannot categorize without a date
+            return item
 
         post_date = datetime.strptime(date_str[:10], '%Y-%m-%d')
         game_version = self.determine_game_version(forum_name)
 
         if game_version == "classic":
             expansions_to_consider = self.get_expansions_for_forum(forum_name)
-            expansion, patch = self.find_classic_expansion_and_patch(
-                post_date, expansions_to_consider)
+            expansion, patch = self.find_classic_expansion_and_patch(post_date, expansions_to_consider)
         else:
-            expansion, patch = self.find_expansion_and_patch(
-                post_date, retail_patches)
+            expansion, patch = self.find_expansion_and_patch(post_date, retail_patches)
 
         adapter['game_version'] = game_version
         adapter['expansion_name'] = expansion
@@ -161,78 +161,51 @@ class WoWPatchPipeline:
         return item
 
     def determine_game_version(self, forum_name: str) -> str:
-        """
-        Determine if a forum post is for Classic or Retail WoW.
-
-        Args:
-            forum_name (str): The name of the forum.
-
-        Returns:
-            str: "classic" or "retail".
-        """
         fn = forum_name.lower()
         return "classic" if "classic" in fn or "season of discovery" in fn else "retail"
 
     def get_expansions_for_forum(self, forum_name: str):
-        """
-        Get the expansions associated with a forum.
-
-        Args:
-            forum_name (str): The name of the forum.
-
-        Returns:
-            list: A list of expansions for the forum.
-        """
         fn = forum_name.lower()
         for name_pattern, expansions in forum_expansion_map.items():
             if name_pattern in fn:
                 return expansions
         return []
 
+    def parse_date(self, date_str: str) -> datetime:
+        return datetime.strptime(date_str[:10], '%Y-%m-%d')
+
+    def _select_patch_for_date(self, patches: dict, post_date: datetime) -> str:
+        """
+        Chooses the patch having the greatest release date that is less than or equal to post_date.
+        Returns "Unknown" if none match.
+        """
+        best_patch = "Unknown"
+        best_date = datetime.min
+        for patch, patch_date_str in patches.items():
+            release_date = self.parse_date(patch_date_str)
+            if release_date <= post_date and release_date > best_date:
+                best_date = release_date
+                best_patch = patch
+        return best_patch
+
     def find_classic_expansion_and_patch(self, post_date: datetime, expansions_list: list):
-        """
-        Find the Classic expansion and patch for a given post date.
-
-        Args:
-            post_date (datetime): The date of the post.
-            expansions_list (list): List of expansions to consider.
-
-        Returns:
-            tuple: The expansion name and patch version.
-        """
         for expansion in expansions_list:
             data = classic_patches.get(expansion)
             if not data:
                 continue
-
-            start = datetime.strptime(data['start'], '%Y-%m-%d')
-            end = datetime.strptime(
-                data['end'], '%Y-%m-%d') if data['end'] else datetime(2999, 1, 1)
+            start = self.parse_date(data['start'])
+            end = self.parse_date(data['end']) if data['end'] else datetime(2999, 1, 1)
 
             if start <= post_date <= end:
-                patch_name = list(data['patch'].keys())[0]
-                return expansion, patch_name
-
+                patch = self._select_patch_for_date(data['patch'], post_date)
+                return expansion, patch
         return "Unknown", "Unknown"
 
     def find_expansion_and_patch(self, post_date: datetime, expansions_dict: dict):
-        """
-        Find the Retail expansion and patch for a given post date.
-
-        Args:
-            post_date (datetime): The date of the post.
-            expansions_dict (dict): Dictionary of retail expansions and patches.
-
-        Returns:
-            tuple: The expansion name and patch version.
-        """
         for expansion, data in expansions_dict.items():
-            start = datetime.strptime(data['start'], '%Y-%m-%d')
-            end = datetime.strptime(
-                data['end'], '%Y-%m-%d') if data['end'] else datetime(2999, 1, 1)
-
+            start = self.parse_date(data['start'])
+            end = self.parse_date(data['end']) if data['end'] else datetime(2999, 1, 1)
             if start <= post_date <= end:
-                patch_name = list(data['patch'].keys())[0]
-                return expansion, patch_name
-
+                patch = self._select_patch_for_date(data['patch'], post_date)
+                return expansion, patch
         return "Unknown", "Unknown"

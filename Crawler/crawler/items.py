@@ -13,8 +13,8 @@ class WoWForumsItem(scrapy.Item):
     patch_version = scrapy.Field()
     # ------------------------------
     username = scrapy.Field()  # Full name with server
-    name = scrapy.Field()      # Name without server
-    server = scrapy.Field()    # Server extracted from username
+    name = scrapy.Field()  # Name without server
+    server = scrapy.Field()  # Server extracted from username
     user_title = scrapy.Field()
     race = scrapy.Field()
     player_class = scrapy.Field()
