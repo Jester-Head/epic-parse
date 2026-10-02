@@ -4,17 +4,19 @@ from scrapy.exceptions import DropItem
 
 class ServerForumFilterPipeline:
     """
-    A Scrapy pipeline that filters out items from known 'server' (realm) forums.
+    Filters out items based on their forum name, ensuring specific server forums
+    are excluded during scraping.
 
-    This pipeline drops items if their 'forum_name' matches any name in 
-    the 'server_forum_names' attribute of the spider. The list of server forum
-    names is set by the spider in the `parse_categories_json` method.
+    This pipeline is designed to work with spiders that define a list of
+    'server_forum_names'. It checks if an item's 'forum_name' matches any of the
+    defined server forum names and excludes such items from the output. The
+    pipeline requires the spider to have a 'server_forum_names' attribute and
+    validates this upon opening the spider.
 
-    Attributes:
-        spider.server_forum_names (set): A set of server forum names to filter.
     """
 
-    def open_spider(self, spider):
+    @staticmethod
+    def open_spider(spider):
         """
         Called when the spider is opened. This method can be used to validate
         that 'server_forum_names' exists on the spider.
@@ -22,12 +24,10 @@ class ServerForumFilterPipeline:
         Args:
             spider (scrapy.Spider): The spider that is running.
         """
-        # Validate that the spider has 'server_forum_names' attribute
         if not hasattr(spider, 'server_forum_names') or not spider.server_forum_names:
             spider.logger.warning(
                 "The spider is missing 'server_forum_names'. Filtering may not work as expected."
             )
-
 
     def process_item(self, item, spider):
         """
@@ -46,9 +46,7 @@ class ServerForumFilterPipeline:
         """
         adapter = ItemAdapter(item)
         forum_name = adapter.get('forum_name', '')
-        
 
-        # Drop the item if the forum name is in the list of server forums
         if forum_name in spider.server_forum_names:
             raise DropItem(
                 f"Discarding item from server forum: {forum_name}")

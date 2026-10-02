@@ -62,7 +62,7 @@ class CacheManager:
         self.cache_dir = cache_dir
         self.video_cache_file = os.path.join(cache_dir, "video_metadata_cache.json")
         self.etag_cache_file = os.path.join(cache_dir, "etag_cache.json")
-        self.channel_cache = {}
+        self.channel_cache = {os.path.join(cache_dir, "channel_metadata_cache.json"): None}
         self.video_cache: LRUCache = LRUCache(max_cache_size)
         self.etag_cache: LRUCache = LRUCache(max_cache_size)
 

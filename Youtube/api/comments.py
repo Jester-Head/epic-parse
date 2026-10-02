@@ -6,7 +6,7 @@ from typing import Dict
 
 from dateutil.parser import parse
 
-from config import CUTOFF_DATE
+from config import CUTOFF_DATE,CHANNELS
 
 logger = logging.getLogger(__name__)
 
@@ -113,9 +113,11 @@ class CommentManager:
             Dict: A dictionary containing the fetched comments and the YouTube service instance.
         """
         # Fallback metadata values
+        from config import CHANNELS
+        channels_dict = {CHANNELS[name]['channel_id']: name for name in list(CHANNELS.keys())}
         fallback_metadata = {
             "video_title": f"Unknown Title ({video_id})",
-            "channel_name": f"Unknown Channel ({channel_id})",
+            "channel_name": f"{channels_dict[channel_id]}" if channel_id in channels_dict else f"Unknown Channel ({channel_id})",
             "video_publish_date": parse(initial_fetch_date),
         }
 

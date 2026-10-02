@@ -1,24 +1,39 @@
 import json
-import logging
-from logging.handlers import RotatingFileHandler
-import scrapy
 import logging.config
+
+import scrapy
+from utilities.config import LOGGING_CONFIG
 
 from crawler.forums_loader import WoWForumsLoader
 from crawler.items import WoWForumsItem
-from utilities.config import LOGGING_CONFIG
 
-# Load logging configuration
 with open(LOGGING_CONFIG, 'rt') as f:
     config = json.load(f)
 
 logging.config.dictConfig(config)
 
+
 class WoWForumsSpider(scrapy.Spider):
+    """
+    Spider for scraping World of Warcraft forums hosted on Blizzard's US forums.
+
+    This class is a Scrapy spider designed to crawl the Blizzard US forums for World of
+    Warcraft. It extracts threads, posts, and metadata such as user details, forum names,
+    and post content. The spider handles pagination seamlessly, identifies server-specific
+    forums, and excludes certain forums from being scraped based on a deny list.
+
+    Attributes:
+        name (str): Name of the spider.
+        allowed_domains (list): List of domains allowed for crawling.
+        posts_per_request (int): Number of posts to fetch per API request.
+        deny_forum_names (set): Set of forum names to exclude from scraping.
+        server_forum_names (set): Set of server-specific forum names identified
+            during the initial crawl.
+
+    """
     name = "wow_forums_spider"
     allowed_domains = ["us.forums.blizzard.com"]
 
-    posts_per_request = 20
     posts_per_request = 20
 
     deny_forum_names = {
@@ -48,7 +63,6 @@ class WoWForumsSpider(scrapy.Spider):
         data = json.loads(response.text)
         categories = data.get("category_list", {}).get("categories", [])
 
-        # Extract server forum names based on a "is_realm" flag in category_metadata
         self.server_forum_names = {
             cat["name"]
             for cat in categories
@@ -57,8 +71,6 @@ class WoWForumsSpider(scrapy.Spider):
         self.logger.info(
             f"Server forum names identified: {self.server_forum_names}")
 
-        # Now yield requests to your subforum pages (or the main page).
-        # Example: the subforum URLs you provided earlier:
         subforum_urls = [
             "https://us.forums.blizzard.com/en/wow/latest?ascending=false&order=posts",
             "https://us.forums.blizzard.com/en/wow/c/in-development/23/l/latest",
@@ -78,13 +90,11 @@ class WoWForumsSpider(scrapy.Spider):
         From a category/subforum page, identify thread links and follow them.
         Also handle pagination if needed.
         """
-        # Thread links typically look like /en/wow/t/<slug>/<number>
         thread_links = response.css('a.title::attr(href)').getall()
         for link in thread_links:
             full_url = response.urljoin(link)
             yield scrapy.Request(full_url, callback=self.parse_thread_html)
 
-        # If there's a "next" page in the subforum, follow it
         next_link = response.css('a[rel="next"]::attr(href)').get()
         if next_link:
             yield scrapy.Request(response.urljoin(next_link), callback=self.parse_subforum)
@@ -95,19 +105,14 @@ class WoWForumsSpider(scrapy.Spider):
         - Extract the numeric thread ID from the URL or the page.
         - Build the /posts.json endpoint and request it -> parse_api
         """
-        # Example URL: https://us.forums.blizzard.com/en/wow/t/foo/12345
-        # Let's split on '/' and take the last segment
+
         parts = response.url.strip("/").split("/")
-        # The last part is usually the numeric ID
         thread_id = parts[-1]
 
-        # Some threads can end with '?something=xyz' so let's remove query params if needed
         thread_id = thread_id.split("?")[0]
 
-        # Build the API URL
         api_url = f"https://us.forums.blizzard.com/en/wow/t/{thread_id}/posts.json"
 
-        # We'll pass along the original HTML response if you want to extract the "forum name" from it
         yield scrapy.Request(
             url=api_url,
             callback=self.parse_api,
@@ -137,13 +142,11 @@ class WoWForumsSpider(scrapy.Spider):
                                   else "Unknown",
                                   )
 
-            # 3) Skip if forum_name is in the deny list
             if forum_name in self.deny_forum_names:
                 self.logger.info(
                     f"Skipping forum: {forum_name} (deny list match)")
                 return
 
-            # Extract posts from the API response
             posts = data.get("post_stream", {}).get("posts", [])
             if not posts:
                 self.logger.info(
@@ -155,14 +158,13 @@ class WoWForumsSpider(scrapy.Spider):
                     item=WoWForumsItem(),
                     selector=None,
                     context={
-                        "include_server": True,  # Include server in username if available
-                        "default_server": "Unknown",  # Default server name if not provided
+                        "include_server": True,
+                        "default_server": "Unknown",
                     },
                 )
 
-                # Add metadata and user details
                 loader.add_value("thread_id", thread_id)
-                loader.add_value("post_id", post.get("id"))
+                loader.add_value("post_id", str(post.get("id")))
                 loader.add_value("url", response.url)
                 loader.add_value(
                     "forum_name",
@@ -181,7 +183,6 @@ class WoWForumsSpider(scrapy.Spider):
                 loader.add_value("classic_andy", post.get("classic", False))
                 loader.add_value("staff", post.get("staff", False))
 
-                # Process and clean comment and quoted text
                 comment_data = WoWForumsLoader.process_and_clean_quotes(
                     post.get("cooked", "")
                 )
@@ -190,7 +191,6 @@ class WoWForumsSpider(scrapy.Spider):
                 loader.add_value("quote_count", len(
                     comment_data["quoted_text"]))
 
-                # Add post statistics
                 loader.add_value("reply_count", post.get("reply_count"))
                 loader.add_value(
                     "likes", self.extract_likes(
@@ -199,7 +199,6 @@ class WoWForumsSpider(scrapy.Spider):
                 loader.add_value("date_created", post.get("created_at"))
                 loader.add_value("date_updated", post.get("updated_at"))
 
-                # Yield the processed item
                 yield loader.load_item()
 
             next_link = html_response.css('a[rel="next"]::attr(href)').get()
@@ -212,7 +211,8 @@ class WoWForumsSpider(scrapy.Spider):
                 f"Error parsing API response for thread {response.meta['thread_id']}: {e}"
             )
 
-    def extract_forum_name(self, response):
+    @staticmethod
+    def extract_forum_name(response):
         """
         Extract the forum name from the page title or fallback options.
 
@@ -229,7 +229,8 @@ class WoWForumsSpider(scrapy.Spider):
         ).get()
         return forum_name or "Unknown"
 
-    def extract_likes(self, actions_summary):
+    @staticmethod
+    def extract_likes(actions_summary):
         """
         Extract the count of likes from the post's action summary.
 

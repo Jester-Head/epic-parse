@@ -21,3 +21,7 @@ log/logging_config.json
 /Crawler/notebooks
 /Crawler/crawler/settings.py
 /Youtube/one_file_scrape.py
+/yt_cache
+/Other_Scrapers/misc_config.py
+/Notebooks/wow_youtube_comments.csv
+.ipynb_checkpoints
