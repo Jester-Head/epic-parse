@@ -1,0 +1,1065 @@
+term
+Alterac Valley
+Arathi Basin
+Ashran
+Battle for Gilneas
+Battle for Wintergrasp
+Deephaul Ravine
+Deepwind Gorge
+Eye of the Storm
+Isle of Conquest
+Korrak's Revenge
+Seething Shore
+Silvershard Mines
+Southshore vs Tarren Mill
+Strand of the Ancients
+Temple of Kotmogu
+Twin Peaks
+Warsong Gulch
+Death knight
+Demon hunter
+Druid
+Evoker
+Hunter
+Mage
+Monk
+Paladin
+Priest
+Rogue
+Shaman
+Warlock
+Warrior
+Alchemy
+Archaeology
+Blacksmithing
+Cooking
+Enchanting
+Engineering
+First Aid
+Fishing
+Herbalism
+Inscription
+Jewelcrafting
+Leatherworking
+Mining
+Skinning
+Tailoring
+Blood elf
+Dark Iron dwarf
+Dracthyr
+Draenei
+Dwarf
+Earthen
+Gnome
+Goblin
+Highmountain tauren
+Human
+Kul Tiran
+Lightforged draenei
+Mag'har orc
+Mechagnome
+Night elf
+Nightborne
+Orc
+Pandaren
+Tauren
+Troll
+Undead
+Void elf
+Vulpera
+Worgen
+Zandalari troll
+Earthcrawl Mines
+Fungal Folly
+Kriegval's Rest
+Mycomancer Cavern
+Nightfall Sanctum
+Skittering Breach
+Tak-Rethan Abyss
+The Dread Pit
+The Sinkhole
+The Spiral Weave
+The Underkeep
+The Waterworks
+Zekvir's Lair
+Ara-Kara, City of Echoes
+Cinderbrew Meadery
+City of Threads
+Darkflame Cleft
+Max-level
+Operation: Floodgate
+Priory of the Sacred Flame
+The Dawnbreaker
+The Rookery
+The Stonevault
+7th Legion Alliance
+Akule Riverhorn
+Alexandros Mograine
+Alliance Forces Alliance
+Alliance Vanguard Alliance
+Arakkoa Outcasts Neutral
+Archivists' Codex Neutral
+Argent Crusade Neutral
+Argent Dawn Neutral
+Argussian Reach Neutral
+Armies of Legionfall Neutral
+Army of the Light Neutral
+Artisan's Consortium
+Ashen Verdict Neutral
+Ashtongue Deathsworn Neutral
+Assembly of the Deeps Neutral
+Automa Neutral
+Avengers of Hyjal Neutral
+Azerothian Archives Neutral
+Baradin's Wardens Alliance
+Baroness Vashj
+Bilgewater Cartel
+Bizmo's Brawlpub
+Bloodsail Buccaneers Neutral
+Booty Bay Neutral
+Brann Bronzebeard Neutral
+Brawl'gar Arena
+Brood of Nozdormu Neutral
+Cenarion Circle Neutral
+Cenarion Expedition Neutral
+Champions of Azeroth Neutral
+Chee Chee
+Choofa
+Chromie
+Cobalt Assembly Neutral
+Conjurer Margoss
+Corbyn
+Council of Dornogal Neutral
+Council of Exarchs Alliance
+Court of Farondis Neutral
+Court of Harvesters Neutral
+Cryptkeeper Kassir
+Darkmoon Faire Neutral
+Darkspear Trolls
+Darnassus
+Death's Advance Neutral
+Dominance Offensive Horde
+Dragonmaw Clan Horde
+Dragonscale Expedition Neutral
+Dream Wardens Neutral
+Dreamweavers Neutral
+Droman Aliothe
+Ella
+Ember Court NPCs
+Ember Court Venthyr
+Emperor Shaohao Neutral
+Enlightened Neutral
+Everlook Neutral
+Exodar Bc icon.gif
+Explorers' League
+Farmer Fung
+Fish Fellreed
+Forest Hozen Horde
+Frenzyheart Tribe Neutral
+Frostwolf Clan
+Frostwolf Orcs Horde
+Gadgetzan Neutral
+Gelkis Clan Centaur Neutral
+Gilneas
+Gina Mudclaw
+Glimmerogg Racer Neutral
+Gnomeregan
+Grandmaster Vole
+Guardians of Hyjal Neutral
+Hallowfall Arathi Neutral
+Hand of the Prophet Alliance
+Haohan Mudclaw
+Hellscream's Reach Horde
+Highmountain Tribe Neutral
+Honeyback Hive Alliance
+Honor Hold Alliance
+Honorbound Horde
+Horde Expedition Horde
+Hunt-Captain Korayn
+Huojin Pandaren
+Hydraxian Waterlords Neutral
+Ilyssia of the Waters
+Impus
+Individual NPCs
+Ironforge
+Iskaara Tuskarr Neutral
+Jogu the Drunk
+Keeper Raynae
+Keepers of Time
+Kirin Tor Neutral
+Kirin Tor Offensive Alliance
+Klaxxi Neutral
+Kleia and Pelagos
+Knights of the Ebon Blade Neutral
+Kurenai Alliance
+Lady Moonberry
+Laughing Skull Orcs Horde
+Loamm Niffen Neutral
+Lower City Neutral
+Magram Clan Centaur Neutral
+Marasmius Night Fae
+Maruuk Centaur Neutral
+Mikanikos
+Moro'gai Neutral
+Nat Pagle
+Netherwing Neutral
+Ogri'la Neutral
+Old Hillpaw
+Operation: Shieldwall Alliance
+Order of Embers Alliance
+Order of the Awakened Neutral
+Order of the Cloud Serpent Neutral
+Orgrimmar
+Pearlfin Jinyu Alliance
+Plague Deviser Marileth
+Polemarch Adrestes
+Proudmoore Admiralty Alliance
+Rajani Neutral
+Ramkahen Neutral
+Ratchet Neutral
+Ravenholdt Neutral
+Rendle and Cudgelface
+Revantusk Tribe Horde
+Royal Apothecary Society Horde
+Rustbolt Resistance Neutral
+Sabellian Neutral
+Severed Threads Neutral
+Sha'leth
+Sha'tari Defense Alliance
+Sha'tari Skyguard Neutral
+Shado-Pan Assault Neutral
+Shado-Pan Neutral
+Shang Xi's Academy Neutral
+Shattered Sun Offensive Neutral
+Shattrath City Bc icon.gif
+Shen'dralar Neutral
+Sholazar Basin
+Sika
+Silvermoon City Bc icon.gif
+Silvermoon Remnant Alliance
+Silverwing Sentinels
+Soridormi Neutral
+Sporeggar Neutral
+Steamwheedle Cartel
+Steamwheedle Preservation Society Neutral
+Stitchmasters Necrolord
+Stonehead
+Storm's Wake Alliance
+Stormpike Guard
+Stormwind
+Sunreaver Onslaught Horde
+Syndicate Neutral
+Talanji's Expedition Horde
+Talon's Vengeance Neutral
+The Aldor Aldor
+The Anglers Neutral
+The Ascended Neutral
+The August Celestials Neutral
+The Avowed Neutral
+The Black Prince Neutral
+The Consortium Neutral
+The Countess
+The Defilers
+The Earthen Ring Neutral
+The Frostborn
+The General Neutral
+The Golden Lotus Neutral
+The Hand of Vengeance
+The Kalu'ak Neutral
+The League of Arathor
+The Lorewalkers Neutral
+The Mag'har Horde
+The Nightfallen Neutral
+The Oracles Neutral
+The Saberstalkers Neutral
+The Scale of the Sands Neutral
+The Scryers Scryers
+The Sha'tar Neutral
+The Silver Covenant
+The Sons of Hodir Neutral
+The Sunreavers
+The Taunka
+The Tillers Neutral
+The Undying Army Neutral
+The Unshackled Horde
+The Violet Eye Neutral
+The Vizier Neutral
+The Wardens Neutral
+The Weaver Neutral
+The Wild Hunt Neutral
+The Wyrmrest Accord Neutral
+Theramore Alliance
+Therazane Neutral
+Thorium Brotherhood Neutral
+Thrallmar Horde
+Thunder Bluff
+Timbermaw Hold Neutral
+Tina Mudclaw
+Tortollan Seekers Neutral
+Tranquillien Horde Bc icon.gif
+Tushui Pandaren Mists-Logo-Small.png
+Uldum Accord Neutral
+Undercity
+Valarjar Neutral
+Valdrakken Accord Neutral
+Valiance Expedition
+Ve'nari
+Vol'jin's Headhunters Horde
+Vol'jin's Spear Horde
+Voldunai Horde
+Warsong Offensive
+Warsong Outriders
+Waveblade Ankoan Alliance
+Wildhammer Clan Alliance
+Winterpelt Furbolg (Related to Azure Span)
+Wintersaber Trainers Alliance
+Wrathion Neutral
+Wrynn's Vanguard Alliance
+Zandalar Tribe Neutral
+Zandalari Empire Horde
+Adelgonn
+Alleria Windrunner
+Anduin Wrynn
+Ansurek
+Baron Revilgaz
+Brann Bronzebeard
+Brinthe
+Dagran Thaurissan II
+Faerin Lothar
+Geya'rah
+Grimla Fizzlecrank
+Jaina Proudmoore
+Jastor Gallywix
+Khadgar
+Kurdran Wildhammer
+Lilian Voss
+Lufsela
+Magni Bronzebeard
+Marin Noggenfogger
+Merrix
+Moira Thaurissan
+Monte Gazlowe
+Orweyna
+Skitter
+Thrall
+Turalyon
+Xal'atath
+Broodtwister Ovi'nax
+Cauldron of Carnage
+Chrome King Gallywix
+Mug'Zee
+Nexus-Princess Ky'veza
+One-Armed Bandit
+Queen Ansurek
+Rasha'nan
+Rik Reverb
+Sikran
+Sprocketmonger Lockenstock
+Stix Bunkjunker
+The Bloodbound Horror
+The Silken Court
+Ulgrax the Devourer
+Vexie Fullthrottle and The Geargrinders
+Liberation of Undermine
+Nerub-ar Palace
+Azj-Kahet
+Dornogal
+Hallowfall
+Isle of Dorn
+Khaz Algar
+Siren Isle
+The Ringing Deeps
+Undermine
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
