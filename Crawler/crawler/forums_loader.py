@@ -111,7 +111,11 @@ class WoWForumsLoader(ItemLoader):
                 "quoted_text": cleaned_quotes,
                 "comment_text": parsed["remaining_text"],
             }
-        except Exception:
+        except (ValueError, AttributeError, TypeError) as e:
+            # Log specific parsing errors and return fallback values
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error parsing HTML content: {e}")
             return {"quoted_text": [], "comment_text": html}
 
     # -------------------------- extracted helper methods from inline lambdas --------- #
