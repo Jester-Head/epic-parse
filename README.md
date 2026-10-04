@@ -58,6 +58,22 @@ python -m epic_parse import-v1 youtube-csv  path\to\comments.csv          # flat
 Imported rows are tagged `extra->>'v1_import' = 'true'`. If a live crawl later fetches
 the same post, the crawled version replaces the imported one.
 
+## Backups
+
+`scripts\backup.ps1` dumps the database (compressed, about 1 GB), checks the dump is readable,
+keeps the newest 4 in `%USERPROFILE%\backups\epic_parse`, and copies the newest to
+`OneDrive\Backups\epic_parse\epic_parse_latest.dump`. A Windows scheduled task
+("Epic-Parse weekly DB backup") runs it every Sunday at 3 AM, or at the next login if the
+PC was off. Results are logged to `backup.log` in the backup folder.
+
+```bash
+# back up now
+powershell -ExecutionPolicy Bypass -File scripts\backup.ps1
+
+# restore into a fresh database (drop or rename the old one first)
+"C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" --create --dbname=postgres path\to\epic_parse_....dump
+```
+
 ## Example queries
 
 ```sql
