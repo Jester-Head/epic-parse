@@ -20,11 +20,10 @@ import json
 import logging
 import os
 import re
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from epic_parse.db import source_id
+from epic_parse.db import bulk_mode, source_id
 from epic_parse.sources import blizzard_forums
 
 log = logging.getLogger(__name__)
@@ -163,28 +162,6 @@ def load(conn, what: str, path: str) -> int | None:
 
 # --------------------------------------------------------------------------- parse
 
-# The GIN search indexes on posts (same definitions as db/schema.sql). Updating them row
-# by row during a multi-million-row insert is extremely slow, so bulk parses drop them
-# and rebuild them once at the end, inside the same transaction.
-SEARCH_INDEXES = {
-    "posts_body_search": "CREATE INDEX posts_body_search ON posts USING gin (body_tsv)",
-    "posts_extra": "CREATE INDEX posts_extra ON posts USING gin (extra jsonb_path_ops)",
-}
-
-
-@contextmanager
-def _bulk_mode(conn):
-    """Call inside conn.transaction(): more memory for sorts, search indexes rebuilt at the end."""
-    conn.execute("SET LOCAL work_mem = '256MB'")
-    conn.execute("SET LOCAL maintenance_work_mem = '1GB'")
-    for name in SEARCH_INDEXES:
-        conn.execute(f"DROP INDEX IF EXISTS {name}")
-    yield
-    log.info("  rebuilding search indexes...")
-    for create in SEARCH_INDEXES.values():
-        conn.execute(create)
-
-
 def parse_forum(conn) -> None:
     """raw v1_forum_item rows -> threads/posts (realm forums and other denied categories skipped)."""
     src = source_id(conn, "blizzard_forums")
@@ -192,7 +169,7 @@ def parse_forum(conn) -> None:
     if not cats:
         raise RuntimeError("No categories.json fetched yet; run a small `fetch blizzard` first")
     denied = sorted({c["name"] for c in cats.values() if c["denied"]})
-    with conn.transaction(), _bulk_mode(conn):
+    with conn.transaction(), bulk_mode(conn):
         conn.execute(
             """
             CREATE TEMP TABLE v1_items ON COMMIT DROP AS
@@ -276,7 +253,7 @@ def parse_youtube(conn) -> None:
     """
     src = source_id(conn, "youtube")
     log.info("Parsing YouTube raw rows (merging API export and CSVs)...")
-    with conn.transaction(), _bulk_mode(conn):
+    with conn.transaction(), bulk_mode(conn):
         conn.execute(
             """
             CREATE TEMP TABLE yt_all ON COMMIT DROP AS

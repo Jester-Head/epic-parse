@@ -45,6 +45,16 @@ Category slugs are the ones in forum URLs, e.g. `gameplay`, `classes`, `pvp`, `l
 `wow-classic`, or a subcategory such as `paladin` or `professions`. Realm forums (retail
 and Classic) and the Off-Topic/Support/Recruitment categories are always skipped.
 
+## Patch tagging
+
+Every forum post gets `game_version` (retail / classic / forever), `expansion` and, for retail,
+`patch` in its `extra` column, based on the post date and forum. `parse` tags new posts
+automatically. After adding a patch to `epic_parse/wow_patches.py`, re-tag everything with:
+
+```bash
+python -m epic_parse tag-patches --overwrite
+```
+
 ## Importing v1 data
 
 Data collected by the old version can be loaded once per file:
@@ -83,6 +93,11 @@ FROM posts p JOIN threads t ON t.id = p.thread_id
 WHERE p.body_tsv @@ plainto_tsquery('english', 'nerf')
 ORDER BY p.created_at DESC;
 
+-- posts per expansion and patch
+SELECT extra->>'expansion' AS expansion, extra->>'patch' AS patch, count(*)
+FROM posts WHERE extra->>'game_version' = 'retail'
+GROUP BY 1, 2 ORDER BY min(created_at);
+
 -- most-liked posts by the poster's class
 SELECT extra->>'class' AS class, count(*), avg((extra->>'likes')::int) AS avg_likes
 FROM posts GROUP BY 1 ORDER BY 2 DESC;
@@ -95,4 +110,7 @@ db/schema.sql                         tables: sources, raw_pages, threads, posts
 epic_parse/db.py                      connection (.env) and init-db
 epic_parse/fetch.py                   polite fetcher: delay, retries, saves to raw_pages
 epic_parse/sources/blizzard_forums.py fetch + parse for the Blizzard forums
+epic_parse/wow_patches.py             patch dates and game version / expansion / patch tagging
+epic_parse/importers/v1_archive.py    one-off importers for v1 data files
+scripts/backup.ps1                    database backup (run weekly by Task Scheduler)
 ```

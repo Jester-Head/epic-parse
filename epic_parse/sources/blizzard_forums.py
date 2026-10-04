@@ -10,6 +10,7 @@ import ftfy
 from bs4 import BeautifulSoup
 from psycopg.types.json import Jsonb
 
+from epic_parse import wow_patches
 from epic_parse.db import source_id
 from epic_parse.fetch import Fetcher
 
@@ -318,3 +319,4 @@ def parse(conn, batch_size: int = 200) -> None:
         ).rowcount
     log.info("Parsed %d raw pages: %d thread updates, %d post upserts, %d replies linked",
              pages, threads, posts, linked)
+    wow_patches.tag_posts(conn, SOURCE)
