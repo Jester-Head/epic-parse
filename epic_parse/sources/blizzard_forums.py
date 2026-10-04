@@ -21,7 +21,8 @@ BASE = "https://us.forums.blizzard.com/en/wow"
 # Top-level categories crawled when none are given (their subcategories are included).
 DEFAULT_CATEGORIES = ["gameplay", "classes", "pvp", "lore", "in-development", "community", "wow-classic"]
 
-# Skipped wherever they appear, as a category or a subcategory.
+# Skipped wherever they appear, as a category or a subcategory (along with their
+# subcategories). All realm forums, retail and Classic, are skipped too; see _is_realm().
 DENY_CATEGORY_NAMES = {
     "Off-Topic",
     "Support",
@@ -40,20 +41,26 @@ OLD_POST_HEADER = re.compile(r"\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2} [AP]M\s*Poste
 # --------------------------------------------------------------------------- fetch
 
 
+def _is_realm(category: dict) -> bool:
+    """Realm forums (retail and Classic) carry an `is_realm` flag in their metadata."""
+    return "is_realm" in (category.get("category_metadata") or {})
+
+
 def _fetch_categories(fetcher: Fetcher) -> dict[int, dict]:
-    """Return {category_id: {"name", "slug", "parent"}} for categories and subcategories."""
+    """Return {category_id: {"name", "slug", "parent", "denied"}} for categories and subcategories."""
     _, data = fetcher.get_json(f"{BASE}/categories.json", "categories", params={"include_subcategories": "true"})
     cats = {}
     for c in data["category_list"]["categories"]:
-        cats[c["id"]] = {"name": c["name"], "slug": c["slug"], "parent": None}
+        parent_denied = _is_realm(c) or c["name"] in DENY_CATEGORY_NAMES
+        cats[c["id"]] = {"name": c["name"], "slug": c["slug"], "parent": None, "denied": parent_denied}
         for sub in c.get("subcategory_list", []):
-            cats[sub["id"]] = {"name": sub["name"], "slug": sub["slug"], "parent": c["name"]}
+            denied = parent_denied or _is_realm(sub) or sub["name"] in DENY_CATEGORY_NAMES
+            cats[sub["id"]] = {"name": sub["name"], "slug": sub["slug"], "parent": c["name"], "denied": denied}
     return cats
 
 
 def _is_denied(cats: dict[int, dict], category_id: int) -> bool:
-    cat = cats.get(category_id, {})
-    return cat.get("name") in DENY_CATEGORY_NAMES or cat.get("parent") in DENY_CATEGORY_NAMES
+    return cats.get(category_id, {}).get("denied", False)
 
 
 def _already_have(conn, topic: dict) -> bool:
@@ -102,6 +109,9 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
         for slug in categories or DEFAULT_CATEGORIES:
             if slug not in by_slug:
                 log.error("Unknown category %r. Known: %s", slug, ", ".join(sorted(by_slug)))
+                continue
+            if cats[by_slug[slug]]["denied"]:
+                log.error("Category %r is on the deny list (realm forum or excluded category), skipping", slug)
                 continue
             page = 0
             while max_pages is None or page < max_pages:
