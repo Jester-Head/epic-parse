@@ -4,12 +4,13 @@
   fetch blizzard [options]        download forum data into raw_pages
   parse blizzard                  turn raw pages into threads/posts rows
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
+  tag-patches [--overwrite]       tag forum posts with game version / expansion / patch
   stats                           row counts per table
 """
 import argparse
 import logging
 
-from epic_parse import db
+from epic_parse import db, wow_patches
 from epic_parse.importers import v1_archive
 from epic_parse.sources import blizzard_forums
 
@@ -38,6 +39,10 @@ def main() -> None:
     p_import.add_argument("kind", choices=v1_archive.KINDS, help="what kind of file it is")
     p_import.add_argument("path", help="path to the file")
 
+    p_tag = sub.add_parser("tag-patches", help="tag forum posts with game version, expansion and patch")
+    p_tag.add_argument("--overwrite", action="store_true",
+                       help="re-tag every post, not just untagged ones (e.g. after editing wow_patches.py)")
+
     sub.add_parser("stats", help="show row counts")
 
     args = parser.parse_args()
@@ -57,6 +62,8 @@ def main() -> None:
             SOURCES[args.source].parse(conn)
         elif args.command == "import-v1":
             v1_archive.run(conn, args.kind, args.path)
+        elif args.command == "tag-patches":
+            wow_patches.tag_posts(conn, overwrite=args.overwrite)
         elif args.command == "stats":
             for table in ("raw_pages", "threads", "posts"):
                 count = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
