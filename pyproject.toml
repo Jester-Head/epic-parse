@@ -1,0 +1,19 @@
+[project]
+name = "epic-parse"
+version = "0.2.0"
+description = "Collect World of Warcraft community discussion (forums, Reddit, YouTube...) into Postgres"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "ftfy>=6.2",
+    "httpx>=0.27",
+    "psycopg[binary]>=3.2",
+    "python-dotenv>=1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["epic_parse*"]

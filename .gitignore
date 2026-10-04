@@ -1,27 +1,20 @@
-.vscode
-__pycache__
-config.py
-requirements.in
-tests
-.pytest_cache
-logs
-video_metadata_cache.json
-channel_metadata_cache.json
-private_files
-log/logging_config.json
-/highlighted_code.html
-/.idea
-/Youtube/yt_cache
-/Crawler/data
-/Crawler/yt_cache
-/Crawler/tests
-/utils/config.py
-/Youtube/.idea
-/Crawler/utilities
-/Crawler/notebooks
-/Crawler/crawler/settings.py
-/Youtube/one_file_scrape.py
-/yt_cache
-/Other_Scrapers/misc_config.py
-/Notebooks/wow_youtube_comments.csv
-.ipynb_checkpoints
+# Old v1 code kept locally for reference (also preserved in git tag v1-archive)
+/_v1/
+
+# Secrets / local config
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Editors
+.idea/
+.vscode/
+
+# Logs and local data dumps
+logs/
+*.log
