@@ -3,12 +3,14 @@
   init-db                         create the database and tables
   fetch blizzard [options]        download forum data into raw_pages
   parse blizzard                  turn raw pages into threads/posts rows
+  import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
   stats                           row counts per table
 """
 import argparse
 import logging
 
 from epic_parse import db
+from epic_parse.importers import v1_archive
 from epic_parse.sources import blizzard_forums
 
 SOURCES = {"blizzard": blizzard_forums}
@@ -32,6 +34,10 @@ def main() -> None:
     p_parse = sub.add_parser("parse", help="turn unparsed raw pages into threads/posts rows")
     p_parse.add_argument("source", choices=SOURCES)
 
+    p_import = sub.add_parser("import-v1", help="import a data file collected by the v1 project")
+    p_import.add_argument("kind", choices=v1_archive.KINDS, help="what kind of file it is")
+    p_import.add_argument("path", help="path to the file")
+
     sub.add_parser("stats", help="show row counts")
 
     args = parser.parse_args()
@@ -49,10 +55,17 @@ def main() -> None:
                                        max_topics=args.max_topics, delay=args.delay)
         elif args.command == "parse":
             SOURCES[args.source].parse(conn)
+        elif args.command == "import-v1":
+            v1_archive.run(conn, args.kind, args.path)
         elif args.command == "stats":
             for table in ("raw_pages", "threads", "posts"):
                 count = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
                 print(f"{table:<10} {count:>10,}")
+            for name, threads, posts in conn.execute(
+                "SELECT s.name, (SELECT count(*) FROM threads t WHERE t.source_id = s.id), "
+                "(SELECT count(*) FROM posts p WHERE p.source_id = s.id) FROM sources s ORDER BY s.name"
+            ):
+                print(f"  {name:<16} {threads:>9,} threads {posts:>11,} posts")
             unparsed = conn.execute("SELECT count(*) FROM raw_pages WHERE parsed_at IS NULL "
                                     "AND kind IN ('topic', 'posts') AND status = 200").fetchone()[0]
             print(f"unparsed   {unparsed:>10,}")
