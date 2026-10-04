@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -162,6 +163,27 @@ def load(conn, what: str, path: str) -> int | None:
 
 # --------------------------------------------------------------------------- parse
 
+# The GIN search indexes on posts (same definitions as db/schema.sql). Updating them row
+# by row during a multi-million-row insert is extremely slow, so bulk parses drop them
+# and rebuild them once at the end, inside the same transaction.
+SEARCH_INDEXES = {
+    "posts_body_search": "CREATE INDEX posts_body_search ON posts USING gin (body_tsv)",
+    "posts_extra": "CREATE INDEX posts_extra ON posts USING gin (extra jsonb_path_ops)",
+}
+
+
+@contextmanager
+def _bulk_mode(conn):
+    """Call inside conn.transaction(): more memory for sorts, search indexes rebuilt at the end."""
+    conn.execute("SET LOCAL work_mem = '256MB'")
+    conn.execute("SET LOCAL maintenance_work_mem = '1GB'")
+    for name in SEARCH_INDEXES:
+        conn.execute(f"DROP INDEX IF EXISTS {name}")
+    yield
+    log.info("  rebuilding search indexes...")
+    for create in SEARCH_INDEXES.values():
+        conn.execute(create)
+
 
 def parse_forum(conn) -> None:
     """raw v1_forum_item rows -> threads/posts (realm forums and other denied categories skipped)."""
@@ -170,7 +192,7 @@ def parse_forum(conn) -> None:
     if not cats:
         raise RuntimeError("No categories.json fetched yet; run a small `fetch blizzard` first")
     denied = sorted({c["name"] for c in cats.values() if c["denied"]})
-    with conn.transaction():
+    with conn.transaction(), _bulk_mode(conn):
         conn.execute(
             """
             CREATE TEMP TABLE v1_items ON COMMIT DROP AS
@@ -183,6 +205,7 @@ def parse_forum(conn) -> None:
             """,
             {"src": src, "denied": denied},
         )
+        conn.execute("ANALYZE v1_items")
         threads = conn.execute(
             """
             INSERT INTO threads (source_id, source_key, category, url, created_at, last_posted_at, post_count, extra)
@@ -252,7 +275,8 @@ def parse_youtube(conn) -> None:
     replies) and the CSV exports (video titles, channel names) complete each other.
     """
     src = source_id(conn, "youtube")
-    with conn.transaction():
+    log.info("Parsing YouTube raw rows (merging API export and CSVs)...")
+    with conn.transaction(), _bulk_mode(conn):
         conn.execute(
             """
             CREATE TEMP TABLE yt_all ON COMMIT DROP AS
@@ -306,6 +330,8 @@ def parse_youtube(conn) -> None:
             ORDER BY comment_id, fetched_at DESC
             """
         )
+        conn.execute("ANALYZE yt")
+        log.info("  merged comments ready, writing videos...")
         threads = conn.execute(
             """
             INSERT INTO threads (source_id, source_key, category, title, url, post_count, extra)
@@ -320,6 +346,7 @@ def parse_youtube(conn) -> None:
             """,
             {"src": src},
         ).rowcount
+        log.info("  writing comments...")
         posts = conn.execute(
             """
             INSERT INTO posts (source_id, source_key, thread_id, author, body, created_at, updated_at, raw_page_id, extra)
@@ -336,12 +363,18 @@ def parse_youtube(conn) -> None:
             """,
             {"src": src},
         ).rowcount
+        log.info("  linking replies...")
+        # Join through the temp table's plain columns so both sides use the
+        # (source_id, source_key) index; joining on extra->>'parent_comment' made
+        # Postgres compare every reply with every post.
         linked = conn.execute(
             """
             UPDATE posts c SET parent_id = p.id
-            FROM posts p
-            WHERE c.source_id = %(src)s AND p.source_id = %(src)s AND c.parent_id IS NULL
-              AND c.extra ? 'parent_comment' AND p.source_key = c.extra->>'parent_comment'
+            FROM yt y
+            JOIN posts p ON p.source_id = %(src)s AND p.source_key = y.parent_comment
+            WHERE y.parent_comment IS NOT NULL
+              AND c.source_id = %(src)s AND c.source_key = y.comment_id
+              AND c.parent_id IS DISTINCT FROM p.id
             """,
             {"src": src},
         ).rowcount

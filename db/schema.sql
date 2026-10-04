@@ -54,11 +54,14 @@ CREATE TABLE IF NOT EXISTS posts (
     body        text,                      -- cleaned plain text, quotes removed
     created_at  timestamptz,
     updated_at  timestamptz,
-    raw_page_id bigint REFERENCES raw_pages,
+    raw_page_id bigint,                    -- the raw_pages row this came from (not a foreign key: see below)
     extra       jsonb NOT NULL DEFAULT '{}',   -- likes, class, race, quotes, ...
     body_tsv    tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(body, ''))) STORED,
     UNIQUE (source_id, source_key)
 );
+-- posts.raw_page_id is provenance only. As a foreign key, every insert had to lock its
+-- raw_pages row, which is a disk write; at millions of rows that made bulk imports crawl.
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_raw_page_id_fkey;
 CREATE INDEX IF NOT EXISTS posts_thread ON posts (thread_id, position);
 CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at);
 CREATE INDEX IF NOT EXISTS posts_body_search ON posts USING gin (body_tsv);
