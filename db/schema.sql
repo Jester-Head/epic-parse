@@ -64,4 +64,16 @@ CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at);
 CREATE INDEX IF NOT EXISTS posts_body_search ON posts USING gin (body_tsv);
 CREATE INDEX IF NOT EXISTS posts_extra ON posts USING gin (extra jsonb_path_ops);
 
-INSERT INTO sources (name) VALUES ('blizzard_forums') ON CONFLICT DO NOTHING;
+-- Files loaded by `python -m epic_parse import-v1 ...` (prevents loading the same file twice).
+CREATE TABLE IF NOT EXISTS imports (
+    id          bigserial PRIMARY KEY,
+    source_id   int NOT NULL REFERENCES sources,
+    path        text NOT NULL,
+    kind        text NOT NULL,
+    rows        int,
+    finished_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (path, kind)
+);
+ALTER TABLE raw_pages ADD COLUMN IF NOT EXISTS import_id bigint REFERENCES imports;
+
+INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube') ON CONFLICT DO NOTHING;

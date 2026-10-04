@@ -42,7 +42,21 @@ Re-running `fetch` skips threads that haven't had new posts since they were last
 and only downloads posts that aren't stored yet.
 
 Category slugs are the ones in forum URLs, e.g. `gameplay`, `classes`, `pvp`, `lore`,
-`wow-classic`, or a subcategory such as `paladin` or `professions`.
+`wow-classic`, or a subcategory such as `paladin` or `professions`. Realm forums (retail
+and Classic) and the Off-Topic/Support/Recruitment categories are always skipped.
+
+## Importing v1 data
+
+Data collected by the old version can be loaded once per file:
+
+```bash
+python -m epic_parse import-v1 forum-log    path\to\spider.log            # forum posts logged by the v1 crawler
+python -m epic_parse import-v1 youtube-json path\to\yt_comments.json      # raw YouTube API comment threads
+python -m epic_parse import-v1 youtube-csv  path\to\comments.csv          # flattened YouTube comment exports
+```
+
+Imported rows are tagged `extra->>'v1_import' = 'true'`. If a live crawl later fetches
+the same post, the crawled version replaces the imported one.
 
 ## Example queries
 

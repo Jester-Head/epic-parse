@@ -47,10 +47,14 @@ def _is_realm(category: dict) -> bool:
 
 
 def _fetch_categories(fetcher: Fetcher) -> dict[int, dict]:
-    """Return {category_id: {"name", "slug", "parent", "denied"}} for categories and subcategories."""
     _, data = fetcher.get_json(f"{BASE}/categories.json", "categories", params={"include_subcategories": "true"})
+    return categories_from_json(data)
+
+
+def categories_from_json(data: dict | None) -> dict[int, dict]:
+    """Return {category_id: {"name", "slug", "parent", "denied"}} for categories and subcategories."""
     cats = {}
-    for c in data["category_list"]["categories"]:
+    for c in (data or {}).get("category_list", {}).get("categories", []):
         parent_denied = _is_realm(c) or c["name"] in DENY_CATEGORY_NAMES
         cats[c["id"]] = {"name": c["name"], "slug": c["slug"], "parent": None, "denied": parent_denied}
         for sub in c.get("subcategory_list", []):
@@ -167,18 +171,23 @@ def split_quotes(html: str) -> tuple[str, list[dict]]:
     return clean_text(soup.get_text(" ", strip=True)), quotes
 
 
-def _latest_categories(conn, src: int) -> dict[int, dict]:
+def latest_categories(conn, src: int) -> dict[int, dict]:
+    """Categories from the most recently fetched categories.json."""
     row = conn.execute(
         "SELECT body FROM raw_pages WHERE source_id = %s AND kind = 'categories' AND status = 200 "
         "ORDER BY fetched_at DESC LIMIT 1",
         (src,),
     ).fetchone()
-    cats = {}
-    for c in (row[0] if row else {}).get("category_list", {}).get("categories", []):
-        cats[c["id"]] = {"name": c["name"], "parent": None}
-        for sub in c.get("subcategory_list", []):
-            cats[sub["id"]] = {"name": sub["name"], "parent": c["name"]}
-    return cats
+    return categories_from_json(row[0] if row else None)
+
+
+def realm_from_username(username: str | None) -> str | None:
+    """'Rozzezz-malganis' -> 'malganis'. Newer usernames end in an account number instead."""
+    if username and "-" in username:
+        tail = username.split("-", 1)[1]
+        if not tail.isdigit():
+            return tail
+    return None
 
 
 def _compact(d: dict) -> dict:
@@ -231,7 +240,7 @@ def _upsert_post(conn, src: int, thread_id: int, raw_id: int, p: dict) -> None:
         "reads": p.get("reads"),
         "quotes": quotes,
         "character": alias.get("name") or p.get("alias_username"),
-        "realm": alias_fields.get("realm"),
+        "realm": alias_fields.get("realm") or realm_from_username(p.get("username")),
         "class": fields.get("class") or alias_fields.get("player_class"),
         "race": fields.get("race") or alias_fields.get("race"),
         "level": fields.get("level") or alias_fields.get("level"),
@@ -262,7 +271,7 @@ def _upsert_post(conn, src: int, thread_id: int, raw_id: int, p: dict) -> None:
 def parse(conn, batch_size: int = 200) -> None:
     """Turn every unparsed raw topic/posts page into threads and posts rows."""
     src = source_id(conn, SOURCE)
-    cats = _latest_categories(conn, src)
+    cats = latest_categories(conn, src)
     pages = threads = posts = 0
     while True:
         with conn.transaction():
