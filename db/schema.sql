@@ -174,6 +174,38 @@ CREATE TABLE IF NOT EXISTS season_events (
     source  text
 );
 
+-- Share of a season's players (in %) with a score at or above p_score: 1.8 means "top 1.8%".
+-- Without p_at: against the final distribution (all known curve points).
+-- With p_at: against the percentile lines as they stood on that date (cutoff history), so a
+-- score from week 6 is compared with week 6, not with the end of the season.
+-- Log-linear interpolation between known points. Above the highest known point it returns
+-- that point's share (an upper bound); below the lowest, that point's share (a lower bound).
+-- NULL when the season has no cutoff data or the score is 0.
+CREATE OR REPLACE FUNCTION mplus_percentile(p_season text, p_score numeric, p_at timestamptz DEFAULT NULL)
+RETURNS numeric LANGUAGE sql STABLE AS $$
+    WITH pts AS (
+        SELECT min_score AS s, fraction AS f FROM mplus_percentile_points
+        WHERE season = p_season AND p_at IS NULL AND fraction > 0
+        UNION ALL
+        SELECT * FROM (
+            SELECT DISTINCT ON (percentile) min_score, (100 - percentile) / 100.0
+            FROM mplus_cutoff_history
+            WHERE season = p_season AND p_at IS NOT NULL AND at <= p_at
+            ORDER BY percentile, at DESC
+        ) h
+    ),
+    lo AS (SELECT s, f FROM pts WHERE s <= p_score ORDER BY s DESC LIMIT 1),
+    hi AS (SELECT s, f FROM pts WHERE s >= p_score ORDER BY s ASC LIMIT 1)
+    SELECT round(100 * CASE
+        WHEN coalesce(p_score, 0) <= 0 THEN NULL
+        WHEN NOT EXISTS (SELECT 1 FROM hi) THEN (SELECT f FROM lo)
+        WHEN NOT EXISTS (SELECT 1 FROM lo) THEN (SELECT f FROM hi)
+        WHEN (SELECT s FROM hi) = (SELECT s FROM lo) THEN (SELECT f FROM lo)
+        ELSE exp(ln((SELECT f FROM lo)) + (p_score - (SELECT s FROM lo)) / ((SELECT s FROM hi) - (SELECT s FROM lo))
+                 * (ln((SELECT f FROM hi)) - ln((SELECT f FROM lo))))
+    END, 3)
+$$;
+
 -- What the rules were each season, so scores and words are read in their own era.
 -- Raw scores are not comparable across eras (level squishes, scoring reworks, moving
 -- achievement goalposts); compare percentiles within a season instead. NULL = not yet
