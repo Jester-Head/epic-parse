@@ -174,6 +174,40 @@ CREATE TABLE IF NOT EXISTS season_events (
     source  text
 );
 
+-- What the rules were each season, so scores and words are read in their own era.
+-- Raw scores are not comparable across eras (level squishes, scoring reworks, moving
+-- achievement goalposts); compare percentiles within a season instead. NULL = not yet
+-- verified. Which score achievements existed each season comes from Raider.IO's data
+-- (mplus_percentile_points rows named 'keystone%'), not from this table.
+CREATE TABLE IF NOT EXISTS season_rules (
+    season          text PRIMARY KEY,     -- Raider.IO slug, e.g. 'season-bfa-2'
+    rating_system   text,                 -- 'raiderio_score_only' (before Blizzard rating) or 'blizzard_rating'
+    affix_split     boolean,              -- best Fortified/Tyrannical runs scored separately (150% / 50%)
+    ksm_requirement text,                 -- what Keystone Master required that season
+    key_squish      text,                 -- key-level squish introduced this season, if any
+    notes           text,                 -- community context, e.g. how hard a level felt at the time
+    sources         text
+);
+INSERT INTO season_rules (season, rating_system, affix_split, ksm_requirement, key_squish, sources) VALUES
+    ('season-bfa-1', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating (replaced +5/+10/+15 achievements in 9.1.0)'),
+    ('season-bfa-2', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
+    ('season-bfa-3', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
+    ('season-bfa-4', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
+    ('season-sl-1',  'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
+    ('season-sl-2',  'blizzard_rating', NULL, 'rating 2000', NULL, 'wiki: Mythic+ Rating (introduced 9.1.0, 2021-06-29)'),
+    ('season-sl-3',  'blizzard_rating', NULL, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-sl-4',  'blizzard_rating', NULL, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-df-1',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating (Fortified/Tyrannical split, DF S1-3)'),
+    ('season-df-2',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-df-3',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-df-4',  'blizzard_rating', NULL, 'rating 2000', 'key levels squished (mapping not yet recorded)', 'wiki: Mythic+ Rating'),
+    ('season-tww-1', 'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating (single score from TWW)'),
+    ('season-tww-2', 'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-tww-3', 'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-mn-1',  'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-mn-2',  'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating')
+ON CONFLICT (season) DO NOTHING;   -- never overwrite rows edited by hand
+
 -- A player is one person behind one or more characters: a forum account, or a person who
 -- told us their characters.
 CREATE TABLE IF NOT EXISTS players (

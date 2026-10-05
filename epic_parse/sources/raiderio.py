@@ -61,7 +61,8 @@ def _fetch_seasons(conn, fetcher: Fetcher) -> list[str]:
     # Cutoffs: refresh seasons that are still running or that we don't have yet.
     for slug in conn.execute(
         "SELECT slug FROM mplus_seasons s WHERE ends > now() "
-        "OR NOT EXISTS (SELECT 1 FROM mplus_cutoffs c WHERE c.season = s.slug) ORDER BY starts"
+        "OR NOT EXISTS (SELECT 1 FROM mplus_cutoffs c WHERE c.season = s.slug) "
+        "OR NOT EXISTS (SELECT 1 FROM mplus_percentile_points p WHERE p.season = s.slug) ORDER BY starts"
     ).fetchall():
         _, data = fetcher.get_json(f"{BASE}/mythic-plus/season-cutoffs", "cutoffs",
                                    params=_params(region=REGION, season=slug[0]))
