@@ -2,7 +2,8 @@
 
   init-db                         create the database and tables
   fetch blizzard [options]        download forum data into raw_pages
-  parse blizzard                  turn raw pages into threads/posts rows
+  fetch raiderio [--limit N]      look up forum posters' characters on Raider.IO
+  parse blizzard|raiderio         turn raw pages into rows
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
   tag-patches [--overwrite]       tag forum posts with game version / expansion / patch
   stats                           row counts per table
@@ -12,9 +13,9 @@ import logging
 
 from epic_parse import db, wow_patches
 from epic_parse.importers import v1_archive
-from epic_parse.sources import blizzard_forums
+from epic_parse.sources import blizzard_forums, raiderio
 
-SOURCES = {"blizzard": blizzard_forums}
+SOURCES = {"blizzard": blizzard_forums, "raiderio": raiderio}
 
 
 def main() -> None:
@@ -30,7 +31,8 @@ def main() -> None:
                          help="category to crawl, e.g. gameplay (repeatable; default: the main WoW categories)")
     p_fetch.add_argument("--max-pages", type=int, help="topic-list pages per category (30 topics each)")
     p_fetch.add_argument("--max-topics", type=int, help="stop after this many new/changed topics")
-    p_fetch.add_argument("--delay", type=float, default=1.5, help="seconds between requests (default 1.5)")
+    p_fetch.add_argument("--limit", type=int, help="raiderio: max characters to look up this run")
+    p_fetch.add_argument("--delay", type=float, help="seconds between requests (default: 1.5 forums, 1.2 raiderio)")
 
     p_parse = sub.add_parser("parse", help="turn unparsed raw pages into threads/posts rows")
     p_parse.add_argument("source", choices=SOURCES)
@@ -56,8 +58,9 @@ def main() -> None:
 
     with db.connect() as conn:
         if args.command == "fetch":
-            SOURCES[args.source].fetch(conn, categories=args.categories, max_pages=args.max_pages,
-                                       max_topics=args.max_topics, delay=args.delay)
+            options = {k: v for k, v in vars(args).items()
+                       if k in ("categories", "max_pages", "max_topics", "limit", "delay") and v is not None}
+            SOURCES[args.source].fetch(conn, **options)
         elif args.command == "parse":
             SOURCES[args.source].parse(conn)
         elif args.command == "import-v1":

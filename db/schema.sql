@@ -79,4 +79,50 @@ CREATE TABLE IF NOT EXISTS imports (
 );
 ALTER TABLE raw_pages ADD COLUMN IF NOT EXISTS import_id bigint REFERENCES imports;
 
-INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube') ON CONFLICT DO NOTHING;
+-- ----------------------------------------------------------------------------
+-- Player context from Raider.IO (raider.io). Their API terms: community and
+-- personal use; anything public built on this data must link to raider.io.
+
+-- Realm name -> slug: "Aman'Thul" -> 'amanthul', "Area 52" -> 'area-52'. Forum posts mix
+-- display names (crawled) and slugs (v1 usernames); use this to match them to characters.
+CREATE OR REPLACE FUNCTION realm_slug(text) RETURNS text
+    LANGUAGE sql IMMUTABLE AS $$ SELECT lower(replace(replace(trim($1), '''', ''), ' ', '-')) $$;
+
+-- Mythic+ seasons (main seasons only, not event or "break the meta" variants).
+CREATE TABLE IF NOT EXISTS mplus_seasons (
+    slug         text PRIMARY KEY,        -- e.g. 'season-mn-2'
+    name         text,
+    expansion_id int,
+    starts       date,                    -- US region
+    ends         date
+);
+
+-- Minimum score for each percentile of the season's player population (US).
+CREATE TABLE IF NOT EXISTS mplus_cutoffs (
+    season      text REFERENCES mplus_seasons,
+    percentile  numeric,                  -- 99.9, 99, 90, 75, 60
+    min_score   numeric,
+    population  int,                      -- players at or above this score
+    fetched_at  timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (season, percentile)
+);
+
+-- Characters that posted, as looked up on Raider.IO.
+CREATE TABLE IF NOT EXISTS characters (
+    id           bigserial PRIMARY KEY,
+    region       text NOT NULL DEFAULT 'us',
+    realm        text NOT NULL,           -- realm_slug() of the realm in the post
+    name         text NOT NULL,
+    found        boolean,                 -- NULL until looked up; false = Raider.IO doesn't know it
+    class        text,
+    spec         text,
+    race         text,
+    faction      text,
+    mplus        jsonb NOT NULL DEFAULT '{}',   -- {"season-mn-2": 3060.6, ...}
+    raid         jsonb NOT NULL DEFAULT '{}',   -- {"raid-slug": {"summary": "7/8 H", "normal": 8, "heroic": 7, "mythic": 0}}
+    looked_up_at timestamptz,
+    raw_page_id  bigint
+);
+CREATE UNIQUE INDEX IF NOT EXISTS characters_key ON characters (region, realm, lower(name));
+
+INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio') ON CONFLICT DO NOTHING;
