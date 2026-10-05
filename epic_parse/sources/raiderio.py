@@ -65,6 +65,7 @@ def _fetch_seasons(conn, fetcher: Fetcher) -> list[str]:
     ).fetchall():
         _, data = fetcher.get_json(f"{BASE}/mythic-plus/season-cutoffs", "cutoffs",
                                    params=_params(region=REGION, season=slug[0]))
+        _store_curve(conn, slug[0], (data or {}).get("cutoffs") or {})
         for key, pct in PERCENTILES.items():
             band = ((data or {}).get("cutoffs", {}).get(key) or {}).get("all") or {}
             if band.get("quantileMinValue") is not None:
@@ -75,6 +76,32 @@ def _fetch_seasons(conn, fetcher: Fetcher) -> list[str]:
                     (slug[0], pct, band["quantileMinValue"], band.get("quantilePopulationCount")),
                 )
     return seasons
+
+
+def _store_curve(conn, season: str, cutoffs: dict) -> None:
+    """Save every (score, share of players at or above) point and the cutoff history."""
+    with conn.transaction():
+        for key, value in cutoffs.items():
+            if not isinstance(value, dict):
+                continue
+            band = value.get("all") or (value.get("cutoffs") or {}).get("all") or {}
+            if band.get("quantileMinValue") is not None and band.get("quantilePopulationFraction") is not None:
+                conn.execute(
+                    """INSERT INTO mplus_percentile_points (season, point, min_score, fraction, population)
+                       VALUES (%s, %s, %s, %s, %s)
+                       ON CONFLICT (season, point) DO UPDATE SET min_score = EXCLUDED.min_score,
+                           fraction = EXCLUDED.fraction, population = EXCLUDED.population""",
+                    (season, key, band["quantileMinValue"], band["quantilePopulationFraction"],
+                     band.get("quantilePopulationCount")),
+                )
+        with conn.cursor() as cur:
+            cur.executemany(
+                """INSERT INTO mplus_cutoff_history (season, percentile, at, min_score, players)
+                   VALUES (%s, %s, to_timestamp(%s / 1000.0), %s, %s) ON CONFLICT DO NOTHING""",
+                [(season, PERCENTILES[key], pt["x"], pt["y"], pt.get("total"))
+                 for key, line in (cutoffs.get("graphData") or {}).items() if key in PERCENTILES
+                 for pt in line.get("data", [])],
+            )
 
 
 def _apply_profile(conn, char_id: int, raw_id: int, status: int, body: dict | None) -> bool:
@@ -149,3 +176,102 @@ def parse(conn) -> None:
     with conn.transaction():
         found = sum(_apply_profile(conn, cid, rid, status, body) for cid, rid, status, body in rows)
     log.info("Re-applied %d profiles (%d found)", len(rows), found)
+
+
+def link_forum_players(conn) -> int:
+    """Each forum account becomes a player, linked to every character it has posted as.
+
+    Only crawled posts carry the account name separately from the character; v1-imported
+    usernames were the character itself, so those can't be grouped.
+    """
+    with conn.transaction():
+        conn.execute(
+            """INSERT INTO characters (region, realm, name)
+               SELECT DISTINCT %(region)s, realm_slug(extra->>'realm'), split_part(extra->>'character', '-', 1)
+               FROM posts WHERE extra ? 'character' AND extra ? 'realm' AND extra->>'game_version' = 'retail'
+               ON CONFLICT DO NOTHING""",
+            {"region": REGION},
+        )
+        conn.execute(
+            """INSERT INTO players (key)
+               SELECT DISTINCT 'forum:' || author FROM posts
+               WHERE extra ? 'character' AND extra->>'game_version' = 'retail'
+               ON CONFLICT DO NOTHING"""
+        )
+        linked = conn.execute(
+            """INSERT INTO player_characters (player_id, character_id, how)
+               SELECT DISTINCT pl.id, ch.id, 'forum_alias'
+               FROM posts p
+               JOIN players pl ON pl.key = 'forum:' || p.author
+               JOIN characters ch ON ch.region = %(region)s AND ch.realm = realm_slug(p.extra->>'realm')
+                                 AND lower(ch.name) = lower(split_part(p.extra->>'character', '-', 1))
+               WHERE p.extra ? 'character' AND p.extra->>'game_version' = 'retail'
+               ON CONFLICT DO NOTHING""",
+            {"region": REGION},
+        ).rowcount
+    log.info("Linked %d new character(s) to forum accounts", linked)
+    return linked
+
+
+def current_season(conn) -> str | None:
+    row = conn.execute(
+        "SELECT slug FROM mplus_seasons WHERE starts <= now() AND (ends IS NULL OR ends > now()) "
+        "ORDER BY starts DESC LIMIT 1"
+    ).fetchone()
+    return row[0] if row else None
+
+
+def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
+    """Record this week's score and item level for every tracked character.
+
+    Tracked = linked to a gold-labelled player, posted in a retail forum this season, or
+    had a score this season at its last lookup. History is appended, never overwritten.
+    """
+    src = source_id(conn, SOURCE)
+    fetcher = Fetcher(conn, src, delay=delay)
+    try:
+        _fetch_seasons(conn, fetcher)  # also refreshes the current season's cutoffs and history
+        season = current_season(conn)
+        link_forum_players(conn)
+        targets = conn.execute(
+            """SELECT ch.id, ch.realm, ch.name FROM characters ch
+               WHERE ch.region = %(region)s AND ch.found IS DISTINCT FROM false
+                 AND NOT EXISTS (SELECT 1 FROM character_snapshots s
+                                 WHERE s.character_id = ch.id AND s.taken_at > now() - interval '5 days')
+                 AND (EXISTS (SELECT 1 FROM player_characters pc JOIN players pl ON pl.id = pc.player_id
+                              WHERE pc.character_id = ch.id AND pl.key LIKE 'gold:%%')
+                      OR coalesce((ch.mplus->>%(season)s)::numeric, 0) > 0
+                      OR EXISTS (SELECT 1 FROM posts p JOIN mplus_seasons ms ON ms.slug = %(season)s
+                                 WHERE p.extra->>'game_version' = 'retail' AND p.created_at >= ms.starts
+                                   AND realm_slug(p.extra->>'realm') = ch.realm
+                                   AND lower(split_part(coalesce(p.extra->>'character', p.author), '-', 1))
+                                       = lower(ch.name)))
+               ORDER BY ch.id LIMIT %(limit)s""",
+            {"region": REGION, "season": season, "limit": limit},
+        ).fetchall()
+        log.info("Snapshotting %d characters for %s", len(targets), season)
+        taken = 0
+        for i, (char_id, realm, name) in enumerate(targets, 1):
+            raw_id, body = fetcher.get_json(
+                f"{BASE}/characters/profile", "snapshot",
+                params=_params(region=REGION, realm=realm, name=name,
+                               fields=f"mythic_plus_scores_by_season:{season},gear,mythic_plus_best_runs:all"),
+            )
+            if not body:
+                conn.execute("UPDATE characters SET found = false, looked_up_at = now() WHERE id = %s AND found IS NULL",
+                             (char_id,))
+                continue
+            score = next((x.get("scores", {}).get("all") for x in body.get("mythic_plus_scores_by_season", [])
+                          if x.get("season") == season), None)
+            conn.execute(
+                """INSERT INTO character_snapshots (character_id, season, score, item_level, runs, spec, raw_page_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (char_id, season, score, (body.get("gear") or {}).get("item_level_equipped"),
+                 len(body.get("mythic_plus_best_runs") or []), body.get("active_spec_name"), raw_id),
+            )
+            taken += 1
+            if i % 100 == 0:
+                log.info("  %d/%d", i, len(targets))
+        log.info("Done: %d snapshots taken", taken)
+    finally:
+        fetcher.close()
