@@ -99,7 +99,7 @@ def _fetch_topic(conn, fetcher: Fetcher, src: int, topic_id: int) -> int:
 
 
 def fetch(conn, categories: list[str] | None = None, max_pages: int | None = None,
-          max_topics: int | None = None, delay: float = 1.5) -> None:
+          max_topics: int | None = None, delay: float = 1.5, **_) -> None:
     """Crawl the given top-level category slugs (default: DEFAULT_CATEGORIES).
 
     max_pages:  topic-list pages per category (30 topics each), newest activity first
