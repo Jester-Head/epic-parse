@@ -23,10 +23,10 @@ log = logging.getLogger(__name__)
 SOURCE = "raiderio"
 BASE = "https://raider.io/api/v1"
 REGION = "us"
-EXPANSIONS = [10, 11]  # The War Within, Midnight (the seasons the forum data covers)
-MAIN_SEASON = re.compile(r"^season-(tww|mn)-\d+$")  # skips event variants like '-break-the-meta'
+EXPANSIONS = [7, 8, 9, 10, 11]  # Battle for Azeroth through Midnight
+MAIN_SEASON = re.compile(r"^season-(bfa|sl|df|tww|mn)-\d+$")  # skips event variants like '-break-the-meta'
 PERCENTILES = {"p999": 99.9, "p990": 99.0, "p900": 90.0, "p750": 75.0, "p600": 60.0}
-SINCE = "2024-09-17"  # TWW Season 1 start: look up characters who posted from then on
+SINCE = "2018-09-01"  # BfA Season 1 start (Raider.IO has no percentile cutoffs before Shadowlands S3)
 
 # Characters behind retail forum posts. Crawled posts store the posting character as
 # 'Name-realm' in extra.character; v1-imported usernames are 'Name-realm' themselves.
@@ -185,27 +185,33 @@ def link_forum_players(conn) -> int:
     usernames were the character itself, so those can't be grouped.
     """
     with conn.transaction():
+        # One pass over posts to get each distinct (account, character); every join after
+        # this is on plain columns. (Joining posts to characters directly on computed
+        # expressions made Postgres compare every post with every character.)
+        conn.execute(
+            """CREATE TEMP TABLE posters ON COMMIT DROP AS
+               SELECT author, realm_slug(extra->>'realm') AS realm,
+                      split_part(extra->>'character', '-', 1) AS name,
+                      lower(split_part(extra->>'character', '-', 1)) AS lname
+               FROM posts WHERE extra ? 'character' AND extra ? 'realm' AND extra->>'game_version' = 'retail'
+               GROUP BY 1, 2, 3"""
+        )
+        conn.execute("ANALYZE posters")
         conn.execute(
             """INSERT INTO characters (region, realm, name)
-               SELECT DISTINCT %(region)s, realm_slug(extra->>'realm'), split_part(extra->>'character', '-', 1)
-               FROM posts WHERE extra ? 'character' AND extra ? 'realm' AND extra->>'game_version' = 'retail'
+               SELECT %(region)s, realm, name FROM posters WHERE name <> '' AND realm <> ''
                ON CONFLICT DO NOTHING""",
             {"region": REGION},
         )
         conn.execute(
-            """INSERT INTO players (key)
-               SELECT DISTINCT 'forum:' || author FROM posts
-               WHERE extra ? 'character' AND extra->>'game_version' = 'retail'
-               ON CONFLICT DO NOTHING"""
+            "INSERT INTO players (key) SELECT DISTINCT 'forum:' || author FROM posters ON CONFLICT DO NOTHING"
         )
         linked = conn.execute(
             """INSERT INTO player_characters (player_id, character_id, how)
                SELECT DISTINCT pl.id, ch.id, 'forum_alias'
-               FROM posts p
-               JOIN players pl ON pl.key = 'forum:' || p.author
-               JOIN characters ch ON ch.region = %(region)s AND ch.realm = realm_slug(p.extra->>'realm')
-                                 AND lower(ch.name) = lower(split_part(p.extra->>'character', '-', 1))
-               WHERE p.extra ? 'character' AND p.extra->>'game_version' = 'retail'
+               FROM posters ps
+               JOIN players pl ON pl.key = 'forum:' || ps.author
+               JOIN characters ch ON ch.region = %(region)s AND ch.realm = ps.realm AND lower(ch.name) = ps.lname
                ON CONFLICT DO NOTHING""",
             {"region": REGION},
         ).rowcount
@@ -234,18 +240,24 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
         season = current_season(conn)
         link_forum_players(conn)
         targets = conn.execute(
-            """SELECT ch.id, ch.realm, ch.name FROM characters ch
+            """WITH season_posters AS (  -- distinct characters that posted this season (one pass over posts)
+                   SELECT DISTINCT realm_slug(extra->>'realm') AS realm,
+                          lower(split_part(coalesce(extra->>'character', author), '-', 1)) AS lname
+                   FROM posts
+                   WHERE extra->>'game_version' = 'retail' AND extra ? 'realm'
+                     AND created_at >= (SELECT starts FROM mplus_seasons WHERE slug = %(season)s)
+               ), gold AS (
+                   SELECT pc.character_id FROM player_characters pc JOIN players pl ON pl.id = pc.player_id
+                   WHERE pl.key LIKE 'gold:%%'
+               )
+               SELECT ch.id, ch.realm, ch.name FROM characters ch
+               LEFT JOIN season_posters sp ON sp.realm = ch.realm AND sp.lname = lower(ch.name)
                WHERE ch.region = %(region)s AND ch.found IS DISTINCT FROM false
                  AND NOT EXISTS (SELECT 1 FROM character_snapshots s
                                  WHERE s.character_id = ch.id AND s.taken_at > now() - interval '5 days')
-                 AND (EXISTS (SELECT 1 FROM player_characters pc JOIN players pl ON pl.id = pc.player_id
-                              WHERE pc.character_id = ch.id AND pl.key LIKE 'gold:%%')
+                 AND (ch.id IN (SELECT character_id FROM gold)
                       OR coalesce((ch.mplus->>%(season)s)::numeric, 0) > 0
-                      OR EXISTS (SELECT 1 FROM posts p JOIN mplus_seasons ms ON ms.slug = %(season)s
-                                 WHERE p.extra->>'game_version' = 'retail' AND p.created_at >= ms.starts
-                                   AND realm_slug(p.extra->>'realm') = ch.realm
-                                   AND lower(split_part(coalesce(p.extra->>'character', p.author), '-', 1))
-                                       = lower(ch.name)))
+                      OR sp.realm IS NOT NULL)
                ORDER BY ch.id LIMIT %(limit)s""",
             {"region": REGION, "season": season, "limit": limit},
         ).fetchall()
