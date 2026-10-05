@@ -18,3 +18,6 @@ __pycache__/
 # Logs and local data dumps
 logs/
 *.log
+
+# Dev blog drafts: a separate local git repo, not pushed with the code
+/docs/blog/
