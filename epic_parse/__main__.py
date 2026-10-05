@@ -3,6 +3,7 @@
   init-db                         create the database and tables
   fetch blizzard [options]        download forum data into raw_pages
   fetch raiderio [--limit N]      look up forum posters' characters on Raider.IO
+  snapshot [--limit N]            weekly Raider.IO snapshot of tracked characters
   parse blizzard|raiderio         turn raw pages into rows
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
   tag-patches [--overwrite]       tag forum posts with game version / expansion / patch
@@ -45,6 +46,9 @@ def main() -> None:
     p_tag.add_argument("--overwrite", action="store_true",
                        help="re-tag every post, not just untagged ones (e.g. after editing wow_patches.py)")
 
+    p_snap = sub.add_parser("snapshot", help="weekly Raider.IO snapshot (score, item level) of tracked characters")
+    p_snap.add_argument("--limit", type=int, help="max characters this run")
+
     sub.add_parser("stats", help="show row counts")
 
     args = parser.parse_args()
@@ -65,6 +69,8 @@ def main() -> None:
             SOURCES[args.source].parse(conn)
         elif args.command == "import-v1":
             v1_archive.run(conn, args.kind, args.path)
+        elif args.command == "snapshot":
+            raiderio.snapshot(conn, limit=args.limit)
         elif args.command == "tag-patches":
             wow_patches.tag_posts(conn, overwrite=args.overwrite)
         elif args.command == "stats":

@@ -125,4 +125,83 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS characters_key ON characters (region, realm, lower(name));
 
+-- Score -> percentile curve for each season: every known (score, share of players at or
+-- above it) point, from the percentile lines, "timed all dungeons at +N" and the keystone
+-- achievements. Lets any percentile (e.g. top 5%) be interpolated.
+CREATE TABLE IF NOT EXISTS mplus_percentile_points (
+    season     text REFERENCES mplus_seasons,
+    point      text,                      -- 'p990', 'allTimed20', 'keystoneLegend', ...
+    min_score  numeric,
+    fraction   numeric,                   -- share of the season's players at or above min_score
+    population int,
+    PRIMARY KEY (season, point)
+);
+
+-- How each percentile line moved during the season (Raider.IO graphData, ~daily).
+-- Used to compare a score with the cutoff *on the same date*.
+CREATE TABLE IF NOT EXISTS mplus_cutoff_history (
+    season     text REFERENCES mplus_seasons,
+    percentile numeric,                   -- 99.9, 99, 90, 75, 60
+    at         timestamptz,
+    min_score  numeric,
+    players    int,                       -- players at or above the line at that time
+    PRIMARY KEY (season, percentile, at)
+);
+
+-- Weekly snapshots of tracked characters, so peak vs final, active span and gear can be
+-- measured (Raider.IO only keeps final scores for past seasons).
+CREATE TABLE IF NOT EXISTS character_snapshots (
+    character_id bigint REFERENCES characters,
+    taken_at     timestamptz NOT NULL DEFAULT now(),
+    season       text,
+    score        numeric,
+    item_level   numeric,                 -- equipped item level at snapshot time
+    runs         int,                     -- dungeons with a scoring run this season
+    spec         text,
+    raw_page_id  bigint,
+    PRIMARY KEY (character_id, taken_at)
+);
+
+-- Things that move scores for everyone (catch-up events, special weeks). Dates often come
+-- from the community rather than official posts.
+CREATE TABLE IF NOT EXISTS season_events (
+    id      serial PRIMARY KEY,
+    season  text,
+    name    text NOT NULL,                -- e.g. 'Turbo Boost', 'Break the Meta'
+    starts  date,
+    ends    date,
+    effect  text,                         -- what it changes
+    source  text
+);
+
+-- A player is one person behind one or more characters: a forum account, or a person who
+-- told us their characters.
+CREATE TABLE IF NOT EXISTS players (
+    id         bigserial PRIMARY KEY,
+    key        text NOT NULL UNIQUE,      -- 'forum:<account username>' or 'gold:<label>'
+    notes      text,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS player_characters (
+    player_id    bigint REFERENCES players,
+    character_id bigint REFERENCES characters,
+    how          text NOT NULL,           -- 'forum_alias' (posted as it) or 'self_reported'
+    role         text,                    -- e.g. 'main this season', 'occasional alt'
+    PRIMARY KEY (player_id, character_id)
+);
+
+-- Human-confirmed labels: the ground truth classifiers are tested against.
+-- season NULL = applies to the player in general.
+CREATE TABLE IF NOT EXISTS gold_labels (
+    id         bigserial PRIMARY KEY,
+    player_id  bigint REFERENCES players,
+    season     text,
+    trait      text NOT NULL,             -- trait_schema name, e.g. 'commitment_tier', 'social_mode'
+    value      text NOT NULL,
+    confidence text NOT NULL DEFAULT 'confirmed',   -- 'confirmed', 'boundary', 'needs_review'
+    note       text,
+    labeled_by text NOT NULL,
+    labeled_at timestamptz NOT NULL DEFAULT now()
+);
+
 INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio') ON CONFLICT DO NOTHING;
