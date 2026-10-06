@@ -6,7 +6,7 @@ groupmates) to test the questions before building a Battle.net-verified version.
 - **Build it:** open [script.google.com](https://script.google.com), create a project, paste
   [`create_form.gs`](create_form.gs), run `createSurvey`, approve the permissions. It logs the
   form's edit link and public link.
-- **Before sending:** fill in the `[TODO]` contact line in the consent text (in both files).
+- **Contact for deletion requests:** epicparse.research@gmail.com (set in both files).
 - **Characters are self-reported** in the pilot and checked against Raider.IO; ownership isn't
   verified until the Battle.net version.
 - Estimated time to complete: 8–12 minutes.
@@ -22,8 +22,8 @@ groupmates) to test the questions before building a Battle.net-verified version.
 > - Your written answers are only quoted (anonymously) if you say yes at the end.
 > - If you list characters, their public Mythic+ and raid data may be looked up on
 >   Raider.IO and linked to your answers, only if you allow it.
-> - You can ask for your answers to be deleted at any time: [TODO: contact, e.g. a Discord
->   handle or email]. Saving your response's edit link also lets you change it later.
+> - You can ask for your answers to be deleted at any time: epicparse.research@gmail.com.
+>   Saving your response's edit link also lets you change it later.
 > - No email address is collected.
 
 ## Questions and codebook
