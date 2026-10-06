@@ -25,8 +25,11 @@ burnout, a group falling apart. That primes respondents to repeat it back. Rules
 - **Rate motivations separately** (an importance grid), never as a forced trade-off: people can
   care about fun *and* results.
 - **Match the answer format to the question.** A "why" question needs reasons, not a number.
-- **Ask about change, not about stopping**: "how did your play change over the season" lets
-  "stopped" be one answer among several.
+- **Ask about amount per patch, not about stopping.** Each season is broken into its patches
+  (x.0, x.5, x.7); people say how much they played in each. Stopping, coming back, starting late
+  or ramping up all show up in the sequence without the survey suggesting any of them, and
+  people recall patches better than "partway through the season". Patch periods line up with
+  the weekly cutoff history and snapshots.
 - In Google Forms, turn on **Shuffle option order** for the reasons list (question 13) so the
   first option isn't favored.
 
@@ -61,8 +64,7 @@ running (earlier seasons go in a free-text question to keep the pilot short).
 | 9 | How do you usually find groups? | Choice: group finder, a regular group, guild, friends, a mix, other | `social_mode` (general) |
 | 10 | Your characters (Name-Realm, one per line; * after current main) | Paragraph | `characters` + `player_characters` (how = `self_reported`) |
 | 11 | May we look up these characters on Raider.IO and link them to your answers? | Choice: yes / no | consent flag for lookups |
-| 12a | How much Mythic+ did you play each season? | Grid: rows = seasons; columns = didn't play, a little, regularly, a lot | `mplus_volume` (per season) |
-| 12b | How did your Mythic+ play change over each season? | Grid: rows = seasons; columns = about the same throughout, more as the season went on, less as the season went on, stopped before the season ended, started partway through | `persistence` (per season) |
+| 12 | Season by season: for each patch, how much Mythic+ did you play? | One grid per season (TWW S1–S3, Midnight S1, Midnight S2 so far); rows = that season's patch periods (x.0 start, x.5, x.7, plus the Midnight pre-patch in TWW S3) with month ranges; columns = didn't play, a little, regularly, a lot | `mplus_volume` per (season, patch); `persistence`, stop patch and return are **derived** from the sequence, never asked |
 | 13 | In seasons where you played less or stopped, what contributed? | Checkboxes (shuffled): got the rewards or rating I wanted; gear felt done; switched to other content; other games or hobbies; less free time; didn't enjoy that season's dungeons or affixes; class or spec changes; changes in my group or guild; hard to find groups; burned out; doesn't apply; other | `stop_reason` (several = possibly a chain; order comes from the free text, not from this list) |
 | 14 | Is there a season that stands out to you, good or bad? What made it that way? | Paragraph | free text: classifier training data |
 | 15 | Anything from earlier seasons worth knowing? | Paragraph | free text; era notes |
