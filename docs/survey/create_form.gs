@@ -38,7 +38,7 @@ const ALL_SEASONS = ['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA S
   'Dragonflight Season 1', 'Dragonflight Season 2', 'Dragonflight Season 3', 'Dragonflight Season 4',
   'TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2'];
 const ACTIVITIES = ['Mythic+', 'Raiding', 'Rated PvP', 'Delves', 'Questing / world', 'Housing', 'Collecting',
-  'Professions / AH', 'Role-play', 'Alts / leveling'];
+  'Gold making', 'Role-play', 'Alts / leveling'];
 const REASONS = ['I reached the rewards or rating I wanted', 'My gear felt complete',
   'I switched to other content (raiding, PvP, alts, etc.)', 'Other games or hobbies', 'Less free time',
   "I didn't enjoy that season's dungeons or affixes", 'Changes to my class or spec',
@@ -88,7 +88,7 @@ function build(form) {
   form.addPageBreakItem().setTitle('How you play')
     .setHelpText('Think about the last two years of World of Warcraft.');
   form.addGridItem().setTitle('1. How often do you do each of these activities?')
-    .setHelpText('Collecting = mounts, pets, transmog or achievements. AH = the auction house.')
+    .setHelpText('Collecting = mounts, pets, transmog or achievements. Gold making = professions, the auction house, farming.')
     .setRows(ACTIVITIES).setColumns(FREQUENCY);
   form.addMultipleChoiceItem().setTitle('2. Which activity matters most to you?')
     .setChoiceValues(ACTIVITIES).showOtherOption(true);

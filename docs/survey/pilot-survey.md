@@ -60,7 +60,7 @@ group falling apart) and primed respondents to repeat it. So:
 | Section | # | Question | Format | Maps to (`gold_labels.trait` unless noted) |
 |---|---|---|---|---|
 | Consent | 0 | I have read the information above and agree to take part | Required choice | consent; responses without it are discarded |
-| How you play | 1 | How often do you do each of these activities? | Grid: rows = Mythic+, raiding, rated PvP, delves, questing/world content, housing, collecting, professions/AH, role-play, alts; columns = Never → Very often | `activity_frequency_*` (one per row); `content_*` derived |
+| How you play | 1 | How often do you do each of these activities? | Grid: rows = Mythic+, raiding, rated PvP, delves, questing/world content, housing, collecting, gold making (professions, AH, farming), role-play, alts; columns = Never → Very often | `activity_frequency_*` (one per row); `content_*` derived |
 | | 2 | Which activity matters most to you? | Choice + Other | `content_primary` |
 | | 3 | In the past two years, how often have you run Mythic+ dungeons? | Choice (Never → Very often); **Never skips to "About you"** | `mplus_frequency`; screener |
 | Mythic+ | 4 | Which role(s) do you play in Mythic+? | Checkboxes: tank, healer, damage | `role` (general) |
