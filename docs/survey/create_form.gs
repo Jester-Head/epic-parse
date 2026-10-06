@@ -8,10 +8,18 @@
  * In the Apps Script editor, pick the function in the dropdown next to Run.
  * The log shows the edit link and the share link.
  *
- * Question numbers and codebook: docs/survey/pilot-survey.md
+ * Structure, scales and codebook: docs/survey/pilot-survey.md
  */
 const CONTACT = 'epicparse.research@gmail.com';
 const FORM_ID = '1BIzxcvAv9efqVwX-XY-mfw3M57CdYhpWsQ-u02l5pSU';  // the pilot form created on 2026-10-05
+const TITLE = 'Your Mythic+ experience (Epic-Parse pilot survey)';
+
+// Standard response scales
+const FREQUENCY = ['Never', 'Rarely', 'Sometimes', 'Often', 'Very often'];
+const IMPORTANCE = ['Not at all important', 'Slightly important', 'Moderately important', 'Very important',
+  'Extremely important', 'Not applicable'];
+const AGREEMENT = ['Strongly disagree', 'Disagree', 'Neither agree nor disagree', 'Agree', 'Strongly agree'];
+const KEYS_PER_WEEK = ['None', '1–3', '4–7', '8–15', '16 or more', "Don't remember"];
 
 // Patch periods within each season (US release dates from epic_parse/wow_patches.py;
 // season dates from Raider.IO). Rows of the per-season grids.
@@ -26,16 +34,20 @@ const SEASON_PATCHES = [
     '12.0.7 (Jun–Aug 2026)']],
   ['Midnight Season 2 (so far)', ['12.1.0: season start (Aug 2026–now)']],
 ];
-const AMOUNT = ["Didn't play", 'A little', 'Regularly', 'A lot'];
 const ALL_SEASONS = ['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA Season 3', 'BfA Season 4',
   'Shadowlands Season 1', 'Shadowlands Season 2', 'Shadowlands Season 3', 'Shadowlands Season 4',
   'Dragonflight Season 1', 'Dragonflight Season 2', 'Dragonflight Season 3', 'Dragonflight Season 4',
   'TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2'];
-const CONTENT = ['Mythic+', 'Raiding', 'Rated PvP', 'Delves / solo content', 'RP, collecting or transmog', 'Other'];
+const ACTIVITIES = ['Mythic+ dungeons', 'Raiding', 'Rated PvP', 'Delves', 'Questing and world content', 'Housing',
+  'Collecting (mounts, pets, transmog, achievements)', 'Professions and the auction house', 'Role-play',
+  'Leveling or playing alts'];
+const REASONS = ['I reached the rewards or rating I wanted', 'My gear felt complete',
+  'I switched to other content (raiding, PvP, alts, etc.)', 'Other games or hobbies', 'Less free time',
+  "I didn't enjoy that season's dungeons or affixes", 'Changes to my class or spec',
+  'Changes in my group or guild', 'It was hard to find groups', 'I felt burned out'];
 
 function createSurvey() {
-  const form = FormApp.create('Your Mythic+ experience (Epic-Parse pilot survey)');
-  build(form);
+  build(FormApp.create(TITLE));
 }
 
 function rebuildSurvey() {
@@ -44,14 +56,15 @@ function rebuildSurvey() {
     throw new Error('This form already has responses. Rebuilding would break them: use createSurvey() for a new form instead.');
   }
   form.getItems().forEach(function (item) { form.deleteItem(item); });
-  form.setTitle('Your Mythic+ experience (Epic-Parse pilot survey)');
+  form.setTitle(TITLE);
   build(form);
 }
 
 function build(form) {
   form.setDescription(
-    'A short survey about how different players experience Mythic+: what matters to them, how they play, ' +
-    'and how that changes over a season. About 10 minutes. Results may appear in blog posts.');
+    'A survey about how players experience World of Warcraft, with a focus on Mythic+: what matters to them, ' +
+    'how they play, and how that changes over a season. It takes about 10 minutes. ' +
+    'Results may appear in blog posts.');
   form.setCollectEmail(false);
   form.setAllowResponseEdits(true);
   form.setLimitOneResponsePerUser(false);
@@ -59,86 +72,111 @@ function build(form) {
   form.setConfirmationMessage(
     'Thank you! If you want to change or remove your answers later, keep your edit link or contact ' + CONTACT + '.');
 
-  // 0. Consent
-  form.addSectionHeaderItem().setTitle('Before you start').setHelpText(
+  // Section 1: Consent
+  form.addSectionHeaderItem().setTitle('About this survey').setHelpText(
     '• Taking part is voluntary, and every question except this one is optional.\n' +
-    '• There are no right answers. Every play style is welcome, including people who rarely run keys.\n' +
+    '• There are no right or wrong answers. Every play style is welcome.\n' +
     '• Results are only published in aggregate. Nothing is published with your character names.\n' +
-    '• Your written answers are only quoted (anonymously) if you say yes at the end.\n' +
+    '• Written answers are only quoted (anonymously) if you give permission at the end.\n' +
     '• If you list characters, their public Mythic+ and raid data may be looked up on Raider.IO ' +
     'and linked to your answers, only if you allow it.\n' +
     '• You can ask for your answers to be deleted at any time: ' + CONTACT + '. ' +
     'Saving your response\'s edit link also lets you change it later.\n' +
     '• No email address is collected.');
-  form.addMultipleChoiceItem().setTitle("I've read the above and agree to take part")
+  form.addMultipleChoiceItem().setTitle('I have read the information above and agree to take part.')
     .setChoiceValues(['I agree']).setRequired(true);
 
-  // About you
-  form.addPageBreakItem().setTitle('About you');
-  form.addMultipleChoiceItem().setTitle('Which region do you mostly play in?')
-    .setChoiceValues(['US', 'EU', 'Oceanic', 'KR', 'TW']);
-  form.addListItem().setTitle('When did you start running Mythic+ regularly?')
-    .setChoiceValues(ALL_SEASONS.concat(['I rarely or never run Mythic+']));
-  form.addCheckboxItem().setTitle('What do you mostly play?').setChoiceValues(CONTENT);
-  form.addMultipleChoiceItem().setTitle('Which one matters most to you?').setChoiceValues(CONTENT);
-  form.addCheckboxItem().setTitle('What role(s) do you play in Mythic+?')
-    .setChoiceValues(['Tank', 'Healer', 'DPS']);
-  form.addGridItem().setTitle('How important are these to you when you play Mythic+?')
+  // Section 2: How you play (everyone)
+  form.addPageBreakItem().setTitle('How you play')
+    .setHelpText('Think about the last two years of World of Warcraft.');
+  form.addGridItem().setTitle('1. How often do you do each of these activities?')
+    .setRows(ACTIVITIES).setColumns(FREQUENCY);
+  form.addMultipleChoiceItem().setTitle('2. Which activity matters most to you?')
+    .setChoiceValues(ACTIVITIES).showOtherOption(true);
+
+  // Screener: people who don't run Mythic+ skip the Mythic+ sections
+  const screener = form.addMultipleChoiceItem()
+    .setTitle('3. In the past two years, how often have you run Mythic+ dungeons?');
+
+  // Section 3: Mythic+
+  const mplusPage = form.addPageBreakItem().setTitle('Mythic+');
+  form.addCheckboxItem().setTitle('4. Which role(s) do you play in Mythic+?')
+    .setChoiceValues(['Tank', 'Healer', 'Damage']);
+  form.addGridItem().setTitle('5. How important is each of the following to you when you play Mythic+?')
     .setRows(['Getting gear', 'Earning rewards (titles, mounts, achievements)', 'Raising my rating',
       'Improving my own play', 'Playing with friends or my guild', 'Enjoying the dungeons themselves',
-      'Competing with other players', 'Something to do in a short session'])
-    .setColumns(['Not important', 'A little', 'Important', 'Very important']);
-  form.addMultipleChoiceItem().setTitle('Do you set rating or achievement goals in Mythic+?')
+      'Competing with other players', 'Having something to do in a short session'])
+    .setColumns(IMPORTANCE);
+  form.addMultipleChoiceItem().setTitle('6. How often do you set a rating or achievement goal for a season?')
     .setHelpText('For example, a score, a key level, or an achievement such as Keystone Master or Hero.')
-    .setChoiceValues(['Never', 'In some seasons', 'In most seasons']);
-  form.addListItem().setTitle('If you do, since about when?').setChoiceValues(ALL_SEASONS);
-  form.addMultipleChoiceItem().setTitle('How do you usually find groups?')
-    .setChoiceValues(['Group finder (pugs)', 'A regular group', 'Guild', 'Friends', 'A mix'])
+    .setChoiceValues(['Never', 'In some seasons', 'In most seasons', 'In every season']);
+  form.addMultipleChoiceItem().setTitle('7. How do you usually find Mythic+ groups?')
+    .setChoiceValues(['Group finder (pick-up groups)', 'A regular group', 'Guild', 'Friends', 'A mix of these'])
     .showOtherOption(true);
 
-  // Characters
-  form.addPageBreakItem().setTitle('Your characters')
-    .setHelpText('Optional. Scores come from Raider.IO, so there are no score questions.');
-  form.addParagraphTextItem()
-    .setTitle('Your characters (Name-Realm, one per line). Put * after your current main.')
-    .setHelpText('Example:\nMychar-Area 52 *\nMyalt-Stormrage');
-  form.addMultipleChoiceItem()
-    .setTitle('May we look up these characters on Raider.IO and link them to your answers?')
-    .setChoiceValues(['Yes', 'No']);
-
-  // Season history
+  // Section 4: Season history
   form.addPageBreakItem().setTitle('Season by season')
-    .setHelpText('For each patch, how much Mythic+ did you play? Fill in only what you remember; ' +
-      'leave a row or a whole season empty if unsure.');
+    .setHelpText('8. For each patch, roughly how many Mythic+ keys did you run per week? ' +
+      'Choose "Don\'t remember" or leave a row empty if you are unsure.');
   SEASON_PATCHES.forEach(function (season) {
-    form.addGridItem().setTitle(season[0]).setRows(season[1]).setColumns(AMOUNT);
+    form.addGridItem().setTitle(season[0]).setRows(season[1]).setColumns(KEYS_PER_WEEK);
   });
+
+  // Section 5: Changes during a season
+  form.addPageBreakItem().setTitle('Changes during a season');
   form.addCheckboxItem()
-    .setTitle('In seasons where you played less Mythic+ or stopped, what contributed? Tick any that apply.')
-    .setChoiceValues(['I got the rewards or rating I wanted', 'My gear felt done', 'I switched to other content (raid, PvP, alts…)',
-      'Other games or hobbies', 'Less free time', "I didn't enjoy that season's dungeons or affixes",
-      'Changes to my class or spec', 'Changes in my group or guild', 'It was hard to find groups', 'I felt burned out',
-      "Doesn't apply: I didn't play less"])
+    .setTitle('9. Think about times you ran fewer keys later in a season than earlier, or stopped. ' +
+      'Which of the following contributed? Select all that apply.')
+    .setChoiceValues(REASONS.concat(['Not applicable: this has not happened to me']))
+    .showOtherOption(true);
+  form.addMultipleChoiceItem().setTitle('10. Of those, which was the main reason?')
+    .setChoiceValues(REASONS.concat(['Not applicable']))
     .showOtherOption(true);
 
-  // In your own words
+  // Section 6: Opinions
+  form.addPageBreakItem().setTitle('Your views');
+  form.addGridItem().setTitle('11. How much do you agree or disagree with each statement?')
+    .setRows(['I enjoy the excitement of random loot drops.',
+      'I prefer rewards I can choose (Great Vault, crests, vendors).',
+      'Mythic+ is more fun with people I know.',
+      'Mythic+ asks for more time than I want to give it.',
+      'The rewards for Mythic+ are worth the effort.'])
+    .setColumns(AGREEMENT);
+
+  // Section 7: In your own words
   form.addPageBreakItem().setTitle('In your own words');
   form.addParagraphTextItem()
-    .setTitle('Is there a season that stands out to you, good or bad? What made it that way?');
+    .setTitle('12. Is there a season that stands out to you, good or bad? What made it that way?');
+  form.addParagraphTextItem().setTitle('13. How has Mythic+ changed for you over the years?');
   form.addParagraphTextItem()
-    .setTitle('Anything from earlier seasons (Legion, BfA, Shadowlands, Dragonflight) worth knowing?');
-  form.addMultipleChoiceItem().setTitle('How do you feel about random loot in Mythic+?')
-    .setChoiceValues(['I enjoy the excitement of random drops',
-      'I prefer guaranteed or choosable rewards (vault, crests, vendors)', 'I like a mix of both',
-      "It doesn't matter much to me"]);
-  form.addParagraphTextItem().setTitle('How has Mythic+ changed for you over the years?');
+    .setTitle('14. Anything from earlier seasons (Legion, BfA, Shadowlands, Dragonflight) worth knowing?');
 
-  // Wrap up
-  form.addPageBreakItem().setTitle('Last two questions');
-  form.addMultipleChoiceItem().setTitle('May we quote your written answers anonymously on the blog?')
+  // Section 8: About you (background questions last)
+  const aboutPage = form.addPageBreakItem().setTitle('About you');
+  form.addMultipleChoiceItem().setTitle('15. Which region do you mostly play in?')
+    .setChoiceValues(['US', 'EU', 'Oceanic', 'KR', 'TW']);
+  form.addListItem().setTitle('16. When did you start running Mythic+ regularly?')
+    .setChoiceValues(ALL_SEASONS.concat(['I have not run Mythic+ regularly']));
+  form.addParagraphTextItem()
+    .setTitle('17. Optional: your characters (Name-Realm, one per line). Put * after your current main.')
+    .setHelpText('Example:\nMychar-Area 52 *\nMyalt-Stormrage');
+  form.addMultipleChoiceItem()
+    .setTitle('18. May we look up these characters on Raider.IO and link them to your answers?')
     .setChoiceValues(['Yes', 'No']);
-  form.addTextItem().setTitle("Optional: Discord or BattleTag, if you're OK with a follow-up question")
+
+  // Section 9: Wrap up
+  form.addPageBreakItem().setTitle('Before you finish');
+  form.addMultipleChoiceItem().setTitle('19. May we quote your written answers anonymously on the blog?')
+    .setChoiceValues(['Yes', 'No']);
+  form.addTextItem().setTitle("20. Optional: Discord or BattleTag, if you're open to a follow-up question")
     .setHelpText('Never published. Kept separate from your answers.');
+
+  // Screener branching (needs the target pages to exist first)
+  screener.setChoices(FREQUENCY.map(function (value) {
+    return value === 'Never'
+      ? screener.createChoice(value, aboutPage)
+      : screener.createChoice(value, mplusPage);
+  }));
 
   Logger.log('Edit link: ' + form.getEditUrl());
   Logger.log('Share link: ' + form.getPublishedUrl());
