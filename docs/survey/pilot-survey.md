@@ -35,7 +35,9 @@ free-text question to keep the pilot short).
 |---|---|---|---|
 | 0 | I've read the above and agree to take part | Required choice | (consent; responses without it are discarded) |
 | 1 | Which region do you mostly play in? | Choice: US / EU / Oceanic / KR / TW | `players.notes` (project is US-focused) |
-| 2 | When did you start pushing M+ seriously? | Dropdown: Legion or earlier, BfA S1 … Midnight S2, Haven't really | `climbing_interest` = started (that season) |
+| 2a | When did you start doing Mythic+ regularly? | Dropdown: Legion or earlier, BfA S1 … Midnight S2, I don't do M+ regularly | `mplus_start` |
+| 2b | Have you ever made a real effort to push your rating? | Choice: yes, most seasons / yes, in some seasons / not really — I run keys for gear, fun or friends / no | `pushing_history` |
+| 2c | If so, when did you first push? | Dropdown (same seasons), optional | `climbing_interest` = started (that season) |
 | 3 | What do you mostly play? | Checkboxes: M+, raid, rated PvP, delves/solo, RP/collecting/transmog, other | `content_*` booleans |
 | 4 | Which one matters most to you? | Choice (same list) | `content_primary` |
 | 5 | What role(s) do you play in M+ nowadays? | Checkboxes: tank, healer, DPS | `role` (general) |
@@ -44,7 +46,7 @@ free-text question to keep the pilot short).
 | 8 | Your characters (Name-Realm, one per line; put * after this season's main) | Paragraph | `characters` + `player_characters` (how = `self_reported`) |
 | 9 | May we look up these characters on Raider.IO and link them to your answers? | Choice: yes / no | consent flag for lookups |
 | 10 | For each season: how did you group? | Grid: rows = seasons; columns = didn't play M+, mostly pug, static/premade, static then pug, mix | `social_mode` (per season) |
-| 11 | For each season: how did it end for you? | Grid: rows = seasons; columns = didn't play, pushed to the end, stopped partway, stopped early, stopped very early | `persistence` (per season) |
+| 11 | For each season: how did it go for you? | Grid: rows = seasons; columns = didn't play M+, played casually (wasn't pushing), pushed to the end, pushed then stopped partway, pushed then stopped early, pushed then stopped very early | `persistence` (per season; casual = not pushing, not "stopped") |
 | 12 | If you stopped: what happened? (tick all, any order) | Checkbox grid: rows = seasons; columns = group fell apart, pugging got too frustrating, burned out, lost interest, life got busy, hit my goal, gear/loot luck, other | `stop_reason` (multiple per season = the chain) |
 | 13 | In your own words: what happened in a season where you stopped, or kept going? | Paragraph | free text: classifier training data |
 | 14 | Anything from earlier seasons (Legion, BfA, Shadowlands, Dragonflight) worth knowing? | Paragraph | free text; era notes |
@@ -58,6 +60,9 @@ free-text question to keep the pilot short).
 - **Stop reasons are a chain, not a single cause** (group dissolves → back to pugging → burnout
   → interest fades → stop), so question 12 allows several per season. The free text in 13 is
   where the order shows.
+- **Don't assume everyone pushes.** Casual players are the comparison group, so questions are
+  worded to fit them too (2a–2c are split for that reason, and question 11 has a "played
+  casually" option, so not pushing is never recorded as "stopped").
 - **No score questions.** Scores come from Raider.IO, which is more reliable than memory.
 - **Every question except consent is optional**, so a partial history is still useful.
 - Answers are `labeled_by = 'respondent (self-reported)'`, the same standard as the owner's gold
