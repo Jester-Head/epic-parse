@@ -11,6 +11,10 @@
 const CONTACT = '[TODO: contact for deletion requests, e.g. a Discord handle or email]';
 
 const SEASONS = ['TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2'];
+const ALL_SEASONS = ['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA Season 3', 'BfA Season 4',
+  'Shadowlands Season 1', 'Shadowlands Season 2', 'Shadowlands Season 3', 'Shadowlands Season 4',
+  'Dragonflight Season 1', 'Dragonflight Season 2', 'Dragonflight Season 3', 'Dragonflight Season 4',
+  'TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2'];
 const CONTENT = ['Mythic+', 'Raiding', 'Rated PvP', 'Delves / solo content', 'RP, collecting or transmog', 'Other'];
 
 function createSurvey() {
@@ -42,12 +46,13 @@ function createSurvey() {
   form.addPageBreakItem().setTitle('About you');
   form.addMultipleChoiceItem().setTitle('Which region do you mostly play in?')
     .setChoiceValues(['US', 'EU', 'Oceanic', 'KR', 'TW']);
-  form.addListItem().setTitle('When did you start pushing Mythic+ seriously?')
-    .setChoiceValues(['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA Season 3', 'BfA Season 4',
-      'Shadowlands Season 1', 'Shadowlands Season 2', 'Shadowlands Season 3', 'Shadowlands Season 4',
-      'Dragonflight Season 1', 'Dragonflight Season 2', 'Dragonflight Season 3', 'Dragonflight Season 4',
-      'TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2',
-      "I haven't really"]);
+  form.addListItem().setTitle('When did you start doing Mythic+ regularly?')
+    .setChoiceValues(ALL_SEASONS.concat(["I don't do Mythic+ regularly"]));
+  form.addMultipleChoiceItem().setTitle('Have you ever made a real effort to push your rating?')
+    .setChoiceValues(['Yes, most seasons', 'Yes, in some seasons',
+      'Not really — I run keys for gear, fun or with friends', 'No']);
+  form.addListItem().setTitle('If so, when did you first push?')
+    .setChoiceValues(ALL_SEASONS);
   form.addCheckboxItem().setTitle('What do you mostly play?').setChoiceValues(CONTENT);
   form.addMultipleChoiceItem().setTitle('Which one matters most to you?').setChoiceValues(CONTENT);
   form.addCheckboxItem().setTitle('What role(s) do you play in Mythic+ nowadays?')
@@ -72,8 +77,9 @@ function createSurvey() {
     .setHelpText('Fill in only the seasons you remember. Leave a row empty if unsure.');
   form.addGridItem().setTitle('How did you group each season?').setRows(SEASONS)
     .setColumns(["Didn't play M+", 'Mostly pugs', 'Static / premade', 'Static, then pugs', 'A mix']);
-  form.addGridItem().setTitle('How did each season end for you?').setRows(SEASONS)
-    .setColumns(["Didn't play", 'Pushed to the end', 'Stopped partway', 'Stopped early', 'Stopped very early']);
+  form.addGridItem().setTitle('How did each season go for you?').setRows(SEASONS)
+    .setColumns(["Didn't play M+", "Played casually (wasn't pushing)", 'Pushed to the end',
+      'Pushed, then stopped partway', 'Pushed, then stopped early', 'Pushed, then stopped very early']);
   form.addCheckboxGridItem().setTitle('If you stopped: what happened? Tick everything that applied.')
     .setHelpText('Reasons often chain together (for example: the group fell apart, then pugging, then burnout).')
     .setRows(SEASONS)
