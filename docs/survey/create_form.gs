@@ -22,21 +22,24 @@ const AGREEMENT = ['Strongly disagree', 'Disagree', 'Neither agree nor disagree'
 const KEYS_PER_WEEK = ['None', '1–3', '4–7', '8–10', '11–15', '16+', 'Not sure'];
 
 // Patch periods within each season (US release dates from epic_parse/wow_patches.py;
-// season dates from Raider.IO). Rows of the per-season grids.
+// season dates from Raider.IO): [season, [[row label, dates], ...]]. Row labels stay short
+// (grid rows get cut off); the dates go in each grid's help text.
 const SEASON_PATCHES = [
-  ['The War Within Season 1', ["11.0.2 (Sep–Oct '24)", "11.0.5 (Oct–Dec '24)", "11.0.7 (Dec '24–Feb '25)"]],
-  ['The War Within Season 2', ["11.1.0 (Mar–Apr '25)", "11.1.5 (Apr–Jun '25)", "11.1.7 (Jun–Aug '25)"]],
-  ['The War Within Season 3', ["11.2.0 (Aug–Oct '25)", "11.2.5 (Oct–Dec '25)", "11.2.7 (Dec '25–Jan '26)",
-    "Pre-patch (Jan–Mar '26)"]],
-  ['Midnight Season 1', ["12.0.1 (Mar–Apr '26)", "12.0.5 (Apr–Jun '26)", "12.0.7 (Jun–Aug '26)"]],
-  ['Midnight Season 2 (so far)', ["12.1.0 (Aug '26–now)"]],
+  ['The War Within Season 1', [['11.0.2', 'Sep–Oct 2024'], ['11.0.5', 'Oct–Dec 2024'],
+    ['11.0.7', 'Dec 2024–Feb 2025']]],
+  ['The War Within Season 2', [['11.1.0', 'Mar–Apr 2025'], ['11.1.5', 'Apr–Jun 2025'],
+    ['11.1.7', 'Jun–Aug 2025']]],
+  ['The War Within Season 3', [['11.2.0', 'Aug–Oct 2025'], ['11.2.5', 'Oct–Dec 2025'],
+    ['11.2.7', 'Dec 2025–Jan 2026'], ['Pre-patch', 'Jan–Mar 2026, before Midnight']]],
+  ['Midnight Season 1', [['12.0.1', 'Mar–Apr 2026'], ['12.0.5', 'Apr–Jun 2026'], ['12.0.7', 'Jun–Aug 2026']]],
+  ['Midnight Season 2 (so far)', [['12.1.0', 'Aug 2026–now']]],
 ];
 const ALL_SEASONS = ['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA Season 3', 'BfA Season 4',
   'Shadowlands Season 1', 'Shadowlands Season 2', 'Shadowlands Season 3', 'Shadowlands Season 4',
   'Dragonflight Season 1', 'Dragonflight Season 2', 'Dragonflight Season 3', 'Dragonflight Season 4',
   'TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2'];
-const ACTIVITIES = ['Mythic+', 'Raiding', 'Rated PvP', 'Delves', 'Questing / world', 'Housing', 'Collecting',
-  'Gold making', 'Role-play', 'Alts / leveling'];
+const ACTIVITIES = ['Mythic+', 'Raiding', 'PvP (unrated)', 'Rated PvP', 'Delves', 'Questing / world', 'Housing',
+  'Collecting', 'Gold making', 'Role-play', 'Alts / leveling'];
 // Question 5: [title, optional help text]
 const MOTIVATIONS = [
   ['5a. Getting gear', ''],
@@ -97,7 +100,8 @@ function build(form) {
   form.addPageBreakItem().setTitle('How you play')
     .setHelpText('Think about the last two years of World of Warcraft.');
   form.addGridItem().setTitle('1. How often do you do each of these activities?')
-    .setHelpText('Collecting = mounts, pets, transmog or achievements. Gold making = professions, the auction house, farming.')
+    .setHelpText('PvP (unrated) = battlegrounds, War Mode, skirmishes. Collecting = mounts, pets, transmog or ' +
+      'achievements. Gold making = professions, the auction house, farming.')
     .setRows(ACTIVITIES).setColumns(FREQUENCY);
   form.addMultipleChoiceItem().setTitle('2. Which activity matters most to you?')
     .setChoiceValues(ACTIVITIES).showOtherOption(true);
@@ -131,7 +135,10 @@ function build(form) {
       'The first patch listed is the start of the season. For reference, 8 keys fill the Great Vault. ' +
       'Choose "Not sure" or leave a row empty if you don\'t remember.');
   SEASON_PATCHES.forEach(function (season) {
-    form.addGridItem().setTitle(season[0]).setRows(season[1]).setColumns(KEYS_PER_WEEK);
+    form.addGridItem().setTitle(season[0])
+      .setHelpText(season[1].map(function (patch) { return patch[0] + ': ' + patch[1]; }).join(' · '))
+      .setRows(season[1].map(function (patch) { return patch[0]; }))
+      .setColumns(KEYS_PER_WEEK);
   });
 
   // Section 5: Changes during a season
