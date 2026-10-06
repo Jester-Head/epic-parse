@@ -16,8 +16,6 @@ const TITLE = 'Your Mythic+ experience (Epic-Parse pilot survey)';
 
 // Standard response scales
 const FREQUENCY = ['Never', 'Rarely', 'Sometimes', 'Often', 'Very often'];
-// Short labels so grid columns aren't cut off; the question text carries the full meaning.
-const IMPORTANCE = ['Not at all', 'Slightly', 'Moderately', 'Very', 'Extremely', 'N/A'];
 const AGREEMENT = ['Strongly disagree', 'Disagree', 'Neither agree nor disagree', 'Agree', 'Strongly agree'];
 // Breaks at 1 / 4 / 8 follow the Great Vault's three Mythic+ slots (8 keys fill it); 8–10 separates
 // "about a full vault" from playing well past it.
@@ -39,6 +37,17 @@ const ALL_SEASONS = ['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA S
   'TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2'];
 const ACTIVITIES = ['Mythic+', 'Raiding', 'Rated PvP', 'Delves', 'Questing / world', 'Housing', 'Collecting',
   'Gold making', 'Role-play', 'Alts / leveling'];
+// Question 5: [title, optional help text]
+const MOTIVATIONS = [
+  ['5a. Getting gear', ''],
+  ['5b. Earning rewards', 'Titles, mounts or achievements.'],
+  ['5c. Raising my rating', ''],
+  ['5d. Improving my own play', ''],
+  ['5e. Playing with friends or my guild', ''],
+  ['5f. Enjoying the dungeons themselves', ''],
+  ['5g. Competing with other players', ''],
+  ['5h. Having something to do in a short session', ''],
+];
 const REASONS = ['I reached the rewards or rating I wanted', 'My gear felt complete',
   'I switched to other content (raiding, PvP, alts, etc.)', 'Other games or hobbies', 'Less free time',
   "I didn't enjoy that season's dungeons or affixes", 'Changes to my class or spec',
@@ -101,11 +110,14 @@ function build(form) {
   const mplusPage = form.addPageBreakItem().setTitle('Mythic+');
   form.addCheckboxItem().setTitle('4. Which role(s) do you play in Mythic+?')
     .setChoiceValues(['Tank', 'Healer', 'Damage']);
-  form.addGridItem().setTitle('5. How important is each of the following to you when you play Mythic+?')
-    .setHelpText('Rewards = titles, mounts or achievements. N/A = does not apply to you.')
-    .setRows(['Getting gear', 'Earning rewards', 'Raising my rating', 'Improving my play',
-      'Friends or guild', 'Enjoying the dungeons', 'Competing with others', 'Short play sessions'])
-    .setColumns(IMPORTANCE);
+  // One 1–5 scale per motivation rather than a grid: wide grids get cut off on phones.
+  form.addSectionHeaderItem().setTitle('5. How important is each of the following to you when you play Mythic+?')
+    .setHelpText('1 = not at all important, 5 = extremely important. Skip any that don\'t apply to you.');
+  MOTIVATIONS.forEach(function (motivation) {
+    const item = form.addScaleItem().setTitle(motivation[0]).setBounds(1, 5)
+      .setLabels('Not at all important', 'Extremely important');
+    if (motivation[1]) item.setHelpText(motivation[1]);
+  });
   form.addMultipleChoiceItem().setTitle('6. How often do you set a rating or achievement goal for a season?')
     .setHelpText('For example, a score, a key level, or an achievement such as Keystone Master or Hero.')
     .setChoiceValues(['Never', 'In some seasons', 'In most seasons', 'In every season']);

@@ -64,7 +64,7 @@ group falling apart) and primed respondents to repeat it. So:
 | | 2 | Which activity matters most to you? | Choice + Other | `content_primary` |
 | | 3 | In the past two years, how often have you run Mythic+ dungeons? | Choice (Never → Very often); **Never skips to "About you"** | `mplus_frequency`; screener |
 | Mythic+ | 4 | Which role(s) do you play in Mythic+? | Checkboxes: tank, healer, damage | `role` (general) |
-| | 5 | How important is each of the following to you when you play Mythic+? | Grid: rows = gear, rewards, rating, improving, friends/guild, enjoying dungeons, competing, short sessions; columns = 5-point importance + Not applicable | `motivation_*`; `focus` derived, never asked |
+| | 5a–h | How important is each of the following to you when you play Mythic+? | Eight separate 1–5 linear scales (1 = not at all important, 5 = extremely important; skip if it doesn't apply): gear, rewards, rating, improving my own play, friends/guild, enjoying the dungeons, competing, short sessions. Not a grid: wide grids get cut off on phones | `motivation_*`; `focus` derived, never asked |
 | | 6 | How often do you set a rating or achievement goal for a season? | Choice: never / some / most / every season | `goal_setting` |
 | | 7 | How do you usually find Mythic+ groups? | Choice + Other | `social_mode` (general) |
 | Season by season | 8 | For each patch, roughly how many keys did you run per week? | One grid per season; rows = patch periods (x.0 start, x.5, x.7, plus the Midnight pre-patch in TWW S3) with month ranges; columns = None, 1–3, 4–7, 8–10, 11–15, 16+, Not sure (help text: 8 keys fill the Great Vault) | `keys_per_week` per (season, patch); `persistence`, stop patch and returns are **derived** |
