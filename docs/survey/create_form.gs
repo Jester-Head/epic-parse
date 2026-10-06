@@ -19,7 +19,9 @@ const FREQUENCY = ['Never', 'Rarely', 'Sometimes', 'Often', 'Very often'];
 const IMPORTANCE = ['Not at all important', 'Slightly important', 'Moderately important', 'Very important',
   'Extremely important', 'Not applicable'];
 const AGREEMENT = ['Strongly disagree', 'Disagree', 'Neither agree nor disagree', 'Agree', 'Strongly agree'];
-const KEYS_PER_WEEK = ['None', '1–3', '4–7', '8–15', '16 or more', "Don't remember"];
+// Breaks at 1 / 4 / 8 follow the Great Vault's three Mythic+ slots; 8–10 separates "about a full
+// vault" from playing well past it.
+const KEYS_PER_WEEK = ['None', '1–3', '4–7', '8–10 (about a full vault)', '11–15', '16 or more', "Don't remember"];
 
 // Patch periods within each season (US release dates from epic_parse/wow_patches.py;
 // season dates from Raider.IO). Rows of the per-season grids.

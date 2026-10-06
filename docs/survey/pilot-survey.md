@@ -34,8 +34,9 @@ group falling apart) and primed respondents to repeat it. So:
 - Screener with branching: people who never run Mythic+ skip the Mythic+ sections.
 - Standard 5-point scales with labeled points: frequency (Never → Very often), importance (Not at
   all → Extremely important, plus Not applicable), agreement (Strongly disagree → Strongly agree).
-- Behavioral anchors instead of vague quantifiers: keys per week (None, 1–3, 4–7, 8–15, 16+),
-  which also match the Great Vault thresholds players think in.
+- Behavioral anchors instead of vague quantifiers: keys per week (None, 1–3, 4–7, 8–10, 11–15,
+  16+). The breaks at 1 / 4 / 8 follow the Great Vault's slots (a full vault is 8 keys), and 8–10
+  separates "about a full vault" from playing well past it.
 - "Select all that apply" followed by "main reason" for causes.
 - Activities are listed separately and grouped at analysis time (e.g. housing is its own row
   rather than being declared "solo" or "social" in the question).
@@ -64,7 +65,7 @@ group falling apart) and primed respondents to repeat it. So:
 | | 5 | How important is each of the following to you when you play Mythic+? | Grid: rows = gear, rewards, rating, improving, friends/guild, enjoying dungeons, competing, short sessions; columns = 5-point importance + Not applicable | `motivation_*`; `focus` derived, never asked |
 | | 6 | How often do you set a rating or achievement goal for a season? | Choice: never / some / most / every season | `goal_setting` |
 | | 7 | How do you usually find Mythic+ groups? | Choice + Other | `social_mode` (general) |
-| Season by season | 8 | For each patch, roughly how many keys did you run per week? | One grid per season; rows = patch periods (x.0 start, x.5, x.7, plus the Midnight pre-patch in TWW S3) with month ranges; columns = None, 1–3, 4–7, 8–15, 16+, Don't remember | `keys_per_week` per (season, patch); `persistence`, stop patch and returns are **derived** |
+| Season by season | 8 | For each patch, roughly how many keys did you run per week? | One grid per season; rows = patch periods (x.0 start, x.5, x.7, plus the Midnight pre-patch in TWW S3) with month ranges; columns = None, 1–3, 4–7, 8–10 (about a full vault), 11–15, 16+, Don't remember | `keys_per_week` per (season, patch); `persistence`, stop patch and returns are **derived** |
 | Changes during a season | 9 | Times you ran fewer keys later in a season, or stopped: which contributed? | Checkboxes (shuffled) + Not applicable + Other | `stop_reason` (several possible) |
 | | 10 | Which was the main reason? | Choice + Not applicable + Other | `stop_reason_main` |
 | Your views | 11 | Agreement with: enjoy random loot; prefer choosable rewards; more fun with people I know; asks for more time than I want to give; rewards worth the effort | Grid: 5-point agreement | `loot_attitude` (first two); `attitude_*` |
