@@ -16,33 +16,29 @@ const TITLE = 'Your Mythic+ experience (Epic-Parse pilot survey)';
 
 // Standard response scales
 const FREQUENCY = ['Never', 'Rarely', 'Sometimes', 'Often', 'Very often'];
-const IMPORTANCE = ['Not at all important', 'Slightly important', 'Moderately important', 'Very important',
-  'Extremely important', 'Not applicable'];
+// Short labels so grid columns aren't cut off; the question text carries the full meaning.
+const IMPORTANCE = ['Not at all', 'Slightly', 'Moderately', 'Very', 'Extremely', 'N/A'];
 const AGREEMENT = ['Strongly disagree', 'Disagree', 'Neither agree nor disagree', 'Agree', 'Strongly agree'];
-// Breaks at 1 / 4 / 8 follow the Great Vault's three Mythic+ slots; 8–10 separates "about a full
-// vault" from playing well past it.
-const KEYS_PER_WEEK = ['None', '1–3', '4–7', '8–10 (about a full vault)', '11–15', '16 or more', "Don't remember"];
+// Breaks at 1 / 4 / 8 follow the Great Vault's three Mythic+ slots (8 keys fill it); 8–10 separates
+// "about a full vault" from playing well past it.
+const KEYS_PER_WEEK = ['None', '1–3', '4–7', '8–10', '11–15', '16+', 'Not sure'];
 
 // Patch periods within each season (US release dates from epic_parse/wow_patches.py;
 // season dates from Raider.IO). Rows of the per-season grids.
 const SEASON_PATCHES = [
-  ['The War Within Season 1', ['11.0.2: season start (Sep–Oct 2024)', '11.0.5 (Oct–Dec 2024)',
-    '11.0.7 (Dec 2024–Feb 2025)']],
-  ['The War Within Season 2', ['11.1.0: season start (Mar–Apr 2025)', '11.1.5 (Apr–Jun 2025)',
-    '11.1.7 (Jun–Aug 2025)']],
-  ['The War Within Season 3', ['11.2.0: season start (Aug–Oct 2025)', '11.2.5 (Oct–Dec 2025)',
-    '11.2.7 (Dec 2025–Jan 2026)', 'Midnight pre-patch (Jan–Mar 2026)']],
-  ['Midnight Season 1', ['12.0.1: season start (Mar–Apr 2026)', '12.0.5 (Apr–Jun 2026)',
-    '12.0.7 (Jun–Aug 2026)']],
-  ['Midnight Season 2 (so far)', ['12.1.0: season start (Aug 2026–now)']],
+  ['The War Within Season 1', ["11.0.2 (Sep–Oct '24)", "11.0.5 (Oct–Dec '24)", "11.0.7 (Dec '24–Feb '25)"]],
+  ['The War Within Season 2', ["11.1.0 (Mar–Apr '25)", "11.1.5 (Apr–Jun '25)", "11.1.7 (Jun–Aug '25)"]],
+  ['The War Within Season 3', ["11.2.0 (Aug–Oct '25)", "11.2.5 (Oct–Dec '25)", "11.2.7 (Dec '25–Jan '26)",
+    "Pre-patch (Jan–Mar '26)"]],
+  ['Midnight Season 1', ["12.0.1 (Mar–Apr '26)", "12.0.5 (Apr–Jun '26)", "12.0.7 (Jun–Aug '26)"]],
+  ['Midnight Season 2 (so far)', ["12.1.0 (Aug '26–now)"]],
 ];
 const ALL_SEASONS = ['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA Season 3', 'BfA Season 4',
   'Shadowlands Season 1', 'Shadowlands Season 2', 'Shadowlands Season 3', 'Shadowlands Season 4',
   'Dragonflight Season 1', 'Dragonflight Season 2', 'Dragonflight Season 3', 'Dragonflight Season 4',
   'TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2'];
-const ACTIVITIES = ['Mythic+ dungeons', 'Raiding', 'Rated PvP', 'Delves', 'Questing and world content', 'Housing',
-  'Collecting (mounts, pets, transmog, achievements)', 'Professions and the auction house', 'Role-play',
-  'Leveling or playing alts'];
+const ACTIVITIES = ['Mythic+', 'Raiding', 'Rated PvP', 'Delves', 'Questing / world', 'Housing', 'Collecting',
+  'Professions / AH', 'Role-play', 'Alts / leveling'];
 const REASONS = ['I reached the rewards or rating I wanted', 'My gear felt complete',
   'I switched to other content (raiding, PvP, alts, etc.)', 'Other games or hobbies', 'Less free time',
   "I didn't enjoy that season's dungeons or affixes", 'Changes to my class or spec',
@@ -92,6 +88,7 @@ function build(form) {
   form.addPageBreakItem().setTitle('How you play')
     .setHelpText('Think about the last two years of World of Warcraft.');
   form.addGridItem().setTitle('1. How often do you do each of these activities?')
+    .setHelpText('Collecting = mounts, pets, transmog or achievements. AH = the auction house.')
     .setRows(ACTIVITIES).setColumns(FREQUENCY);
   form.addMultipleChoiceItem().setTitle('2. Which activity matters most to you?')
     .setChoiceValues(ACTIVITIES).showOtherOption(true);
@@ -105,9 +102,9 @@ function build(form) {
   form.addCheckboxItem().setTitle('4. Which role(s) do you play in Mythic+?')
     .setChoiceValues(['Tank', 'Healer', 'Damage']);
   form.addGridItem().setTitle('5. How important is each of the following to you when you play Mythic+?')
-    .setRows(['Getting gear', 'Earning rewards (titles, mounts, achievements)', 'Raising my rating',
-      'Improving my own play', 'Playing with friends or my guild', 'Enjoying the dungeons themselves',
-      'Competing with other players', 'Having something to do in a short session'])
+    .setHelpText('Rewards = titles, mounts or achievements. N/A = does not apply to you.')
+    .setRows(['Getting gear', 'Earning rewards', 'Raising my rating', 'Improving my play',
+      'Friends or guild', 'Enjoying the dungeons', 'Competing with others', 'Short play sessions'])
     .setColumns(IMPORTANCE);
   form.addMultipleChoiceItem().setTitle('6. How often do you set a rating or achievement goal for a season?')
     .setHelpText('For example, a score, a key level, or an achievement such as Keystone Master or Hero.')
@@ -119,7 +116,8 @@ function build(form) {
   // Section 4: Season history
   form.addPageBreakItem().setTitle('Season by season')
     .setHelpText('8. For each patch, roughly how many Mythic+ keys did you run per week? ' +
-      'Choose "Don\'t remember" or leave a row empty if you are unsure.');
+      'The first patch listed is the start of the season. For reference, 8 keys fill the Great Vault. ' +
+      'Choose "Not sure" or leave a row empty if you don\'t remember.');
   SEASON_PATCHES.forEach(function (season) {
     form.addGridItem().setTitle(season[0]).setRows(season[1]).setColumns(KEYS_PER_WEEK);
   });
@@ -137,13 +135,15 @@ function build(form) {
 
   // Section 6: Opinions
   form.addPageBreakItem().setTitle('Your views');
-  form.addGridItem().setTitle('11. How much do you agree or disagree with each statement?')
-    .setRows(['I enjoy the excitement of random loot drops.',
-      'I prefer rewards I can choose (Great Vault, crests, vendors).',
-      'Mythic+ is more fun with people I know.',
-      'Mythic+ asks for more time than I want to give it.',
-      'The rewards for Mythic+ are worth the effort.'])
-    .setColumns(AGREEMENT);
+  form.addSectionHeaderItem().setTitle('11. How much do you agree or disagree with each statement?');
+  // Separate questions rather than a grid: long statements get cut off in grid rows on phones.
+  [['11a', 'I enjoy the excitement of random loot drops.'],
+   ['11b', 'I prefer rewards I can choose (Great Vault, crests, vendors).'],
+   ['11c', 'Mythic+ is more fun with people I know.'],
+   ['11d', 'Mythic+ asks for more time than I want to give it.'],
+   ['11e', 'The rewards for Mythic+ are worth the effort.']].forEach(function (statement) {
+    form.addMultipleChoiceItem().setTitle(statement[0] + '. ' + statement[1]).setChoiceValues(AGREEMENT);
+  });
 
   // Section 7: In your own words
   form.addPageBreakItem().setTitle('In your own words');
