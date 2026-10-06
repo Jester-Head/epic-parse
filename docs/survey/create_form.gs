@@ -13,7 +13,20 @@
 const CONTACT = 'epicparse.research@gmail.com';
 const FORM_ID = '1BIzxcvAv9efqVwX-XY-mfw3M57CdYhpWsQ-u02l5pSU';  // the pilot form created on 2026-10-05
 
-const SEASONS = ['TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2 (so far)'];
+// Patch periods within each season (US release dates from epic_parse/wow_patches.py;
+// season dates from Raider.IO). Rows of the per-season grids.
+const SEASON_PATCHES = [
+  ['The War Within Season 1', ['11.0.2: season start (Sep–Oct 2024)', '11.0.5 (Oct–Dec 2024)',
+    '11.0.7 (Dec 2024–Feb 2025)']],
+  ['The War Within Season 2', ['11.1.0: season start (Mar–Apr 2025)', '11.1.5 (Apr–Jun 2025)',
+    '11.1.7 (Jun–Aug 2025)']],
+  ['The War Within Season 3', ['11.2.0: season start (Aug–Oct 2025)', '11.2.5 (Oct–Dec 2025)',
+    '11.2.7 (Dec 2025–Jan 2026)', 'Midnight pre-patch (Jan–Mar 2026)']],
+  ['Midnight Season 1', ['12.0.1: season start (Mar–Apr 2026)', '12.0.5 (Apr–Jun 2026)',
+    '12.0.7 (Jun–Aug 2026)']],
+  ['Midnight Season 2 (so far)', ['12.1.0: season start (Aug 2026–now)']],
+];
+const AMOUNT = ["Didn't play", 'A little', 'Regularly', 'A lot'];
 const ALL_SEASONS = ['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA Season 3', 'BfA Season 4',
   'Shadowlands Season 1', 'Shadowlands Season 2', 'Shadowlands Season 3', 'Shadowlands Season 4',
   'Dragonflight Season 1', 'Dragonflight Season 2', 'Dragonflight Season 3', 'Dragonflight Season 4',
@@ -95,12 +108,11 @@ function build(form) {
 
   // Season history
   form.addPageBreakItem().setTitle('Season by season')
-    .setHelpText('Fill in only the seasons you remember. Leave a row empty if unsure.');
-  form.addGridItem().setTitle('How much Mythic+ did you play each season?').setRows(SEASONS)
-    .setColumns(["Didn't play", 'A little', 'Regularly', 'A lot']);
-  form.addGridItem().setTitle('How did your Mythic+ play change over each season?').setRows(SEASONS)
-    .setColumns(['About the same throughout', 'More as the season went on', 'Less as the season went on',
-      'Stopped before the season ended', 'Started partway through']);
+    .setHelpText('For each patch, how much Mythic+ did you play? Fill in only what you remember; ' +
+      'leave a row or a whole season empty if unsure.');
+  SEASON_PATCHES.forEach(function (season) {
+    form.addGridItem().setTitle(season[0]).setRows(season[1]).setColumns(AMOUNT);
+  });
   form.addCheckboxItem()
     .setTitle('In seasons where you played less Mythic+ or stopped, what contributed? Tick any that apply.')
     .setChoiceValues(['I got the rewards or rating I wanted', 'My gear felt done', 'I switched to other content (raid, PvP, alts…)',
