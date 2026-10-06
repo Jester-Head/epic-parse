@@ -8,7 +8,7 @@
  *
  * Question numbers and codebook: docs/survey/pilot-survey.md
  */
-const CONTACT = '[TODO: contact for deletion requests, e.g. a Discord handle or email]';
+const CONTACT = 'epicparse.research@gmail.com';
 
 const SEASONS = ['TWW Season 1', 'TWW Season 2', 'TWW Season 3', 'Midnight Season 1', 'Midnight Season 2 (so far)'];
 const ALL_SEASONS = ['Legion or earlier', 'BfA Season 1', 'BfA Season 2', 'BfA Season 3', 'BfA Season 4',
