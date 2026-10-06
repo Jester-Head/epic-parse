@@ -28,7 +28,7 @@ groupmates) to test the questions before building a Battle.net-verified version.
 
 ## Questions and codebook
 
-Seasons offered: TWW S1, TWW S2, TWW S3, Midnight S1, Midnight S2 (earlier seasons go in a
+Seasons offered: TWW S1, TWW S2, TWW S3, Midnight S1, Midnight S2 "so far" while the season is running (earlier seasons go in a
 free-text question to keep the pilot short).
 
 | # | Question | Type | Maps to (`gold_labels.trait` unless noted) |
