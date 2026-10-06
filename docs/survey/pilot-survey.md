@@ -77,8 +77,8 @@ group falling apart) and primed respondents to repeat it. So:
 | About you | 15 | Region | Choice | `players.notes` (project is US-focused) |
 | | 16 | When did you start running Mythic+ regularly? | Dropdown (seasons) + "have not" | `mplus_start` |
 | | 17 | Characters (Name-Realm, one per line; * = current main) | Paragraph, optional | `characters` + `player_characters` (how = `self_reported`) |
-| | 18 | May we look up these characters on Raider.IO? | Choice | consent flag for lookups |
-| Before you finish | 19 | May we quote your written answers anonymously? | Choice | quote permission |
+| | 18 | May I look up your characters on Raider.IO? | Choice | consent flag for lookups |
+| Before you finish | 19 | May I quote your written answers anonymously on my blog? | Choice | quote permission |
 | | 20 | Optional: Discord or BattleTag for a follow-up | Short text | stored separately; never published |
 
 Answers are stored with `labeled_by = 'respondent (self-reported)'`.

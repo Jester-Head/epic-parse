@@ -72,9 +72,9 @@ function rebuildSurvey() {
 
 function build(form) {
   form.setDescription(
-    'A survey about how players experience World of Warcraft, with a focus on Mythic+: what matters to them, ' +
-    'how they play, and how that changes over a season. It takes about 10 minutes. ' +
-    'Results may appear in blog posts.');
+    'I\'m a WoW player running a personal research project, Epic-Parse, about how players experience ' +
+    'World of Warcraft, with a focus on Mythic+: what matters to them, how they play, and how that changes ' +
+    'over a season. This survey takes about 10 minutes. Results may appear on my blog.');
   form.setCollectEmail(false);
   form.setAllowResponseEdits(true);
   form.setLimitOneResponsePerUser(false);
@@ -182,12 +182,12 @@ function build(form) {
     .setTitle('17. Optional: your characters (Name-Realm, one per line). Put * after your current main.')
     .setHelpText('Example:\nMychar-Area 52 *\nMyalt-Stormrage');
   form.addMultipleChoiceItem()
-    .setTitle('18. May we look up these characters on Raider.IO and link them to your answers?')
+    .setTitle('18. May I look up your characters on Raider.IO and link them to your answers?')
     .setChoiceValues(['Yes', 'No']);
 
   // Section 9: Wrap up
   form.addPageBreakItem().setTitle('Before you finish');
-  form.addMultipleChoiceItem().setTitle('19. May we quote your written answers anonymously on the blog?')
+  form.addMultipleChoiceItem().setTitle('19. May I quote your written answers anonymously on my blog?')
     .setChoiceValues(['Yes', 'No']);
   form.addTextItem().setTitle("20. Optional: Discord or BattleTag, if you're open to a follow-up question")
     .setHelpText('Never published. Kept separate from your answers.');
