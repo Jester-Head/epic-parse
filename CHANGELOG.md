@@ -6,6 +6,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Type checking: `pyright` (dev dependency) configured for the project venv; the code passes with
+  no errors. `db.scalar()` returns a single value and fails clearly when a query returns no row.
 - One row per person (`python -m epic_parse people`, also rebuilt by every weekly snapshot):
   - `people`: each forum account (or self-reported player) with forum activity, character counts
     (retail / Classic / found on Raider.IO / shared with another account), main character, Mythic+
@@ -23,6 +25,11 @@ versions follow [Semantic Versioning](https://semver.org/).
     (`player_seasons.milestones` / `milestone`, `people.best_milestone`, `current_milestone`), so
     questions like "do people stop after Legend?" aren't built into the tier definition.
 - Index on `player_characters (character_id)`.
+
+### Fixed
+- Type-checker findings: fetch status is read from the fetcher instead of re-queried; table and index
+  names in SQL go through `sql.Identifier`; a forum topic-list page that fails no longer crashes the crawl
+  (`data` could be `None`); corrected return types.
 
 ## [0.4.0] - 2026-10-06
 
