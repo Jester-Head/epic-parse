@@ -41,14 +41,29 @@ def refresh(conn) -> tuple[int, int]:
                 SELECT DISTINCT ON (player_id, season) * FROM cs ORDER BY player_id, season, score DESC
             ), alts AS (
                 SELECT player_id, season, count(DISTINCT character_id) AS n FROM cs GROUP BY 1, 2
+            ), ms AS (       -- earliest date each person (any of their characters' accounts) reached each milestone
+                SELECT player_id, season, jsonb_object_agg(milestone, at) AS dates
+                FROM (SELECT pc.player_id, cm.season, cm.milestone, min(cm.achieved_at) AS at
+                      FROM player_characters pc JOIN character_milestones cm ON cm.character_id = pc.character_id
+                      WHERE cm.season IS NOT NULL GROUP BY 1, 2, 3) x
+                GROUP BY 1, 2
+            ), runs AS (     -- latest best-run completion seen for each person and season
+                SELECT pc.player_id, br.season, max(br.completed_at) AS last_at
+                FROM player_characters pc JOIN character_best_runs br ON br.character_id = pc.character_id
+                GROUP BY 1, 2
             )
             INSERT INTO player_seasons (player_id, season, best_character_id, best_character, class, score,
-                                        pct, tier, elite, characters_with_score, provisional, milestones, milestone)
+                                        pct, tier, elite, characters_with_score, provisional, milestones, milestone,
+                                        milestone_dates, last_best_run_at)
             SELECT b.player_id, b.season, b.character_id, b.character, b.class, b.score,
-                   mplus_percentile(b.season, b.score), mplus_tier(b.season, b.score),
-                   mplus_percentile(b.season, b.score) <= 0.1, a.n, s.ends > now(), m.ms, m.ms[cardinality(m.ms)]
+                   pt.pct, mplus_tier_for_pct(b.score, pt.pct),
+                   pt.pct <= 0.1, a.n, s.ends > now(), m.ms, m.ms[cardinality(m.ms)],
+                   ms.dates, runs.last_at
             FROM best b JOIN alts a USING (player_id, season) JOIN mplus_seasons s ON s.slug = b.season
+            LEFT JOIN ms USING (player_id, season)
+            LEFT JOIN runs USING (player_id, season)
             CROSS JOIN LATERAL (SELECT mplus_milestones(b.season, b.score) AS ms) m
+            CROSS JOIN LATERAL (SELECT mplus_percentile(b.season, b.score) AS pct) pt  -- computed once per row
             """
         ).rowcount
 

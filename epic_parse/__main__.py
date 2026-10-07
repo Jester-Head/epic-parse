@@ -10,6 +10,7 @@
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
   tag-patches [--overwrite]       tag forum posts with game version / expansion / patch
   projection [--season S] [--backtest]  projected end-of-season Mythic+ cutoffs
+  milestones                      map keystone achievements; backfill milestone dates and best runs
   people                          rebuild the one-row-per-person tables and summarize them
   stats                           row counts per table
 """
@@ -19,7 +20,8 @@ from typing import LiteralString
 
 from psycopg import sql as pgsql
 
-from epic_parse import db, people, projection, wow_patches
+from epic_parse import db, milestones, people, projection, wow_patches
+from epic_parse.sources.blizzard_api import Token
 from epic_parse.importers import v1_archive
 from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio
 
@@ -63,6 +65,8 @@ def main() -> None:
     p_proj.add_argument("--season", help="Raider.IO season slug (default: the current one)")
     p_proj.add_argument("--backtest", action="store_true", help="also show how accurate past projections were")
 
+    sub.add_parser("milestones", help="map keystone achievements and backfill milestone dates and best runs")
+
     sub.add_parser("people", help="rebuild people / player_seasons (one row per person) and summarize")
 
     sub.add_parser("stats", help="show row counts")
@@ -102,6 +106,8 @@ def main() -> None:
                 print(f"  {'line':<9}{'week':>5}{'seasons':>9}{'median err':>12}{'worst err':>11}{'in range':>10}")
                 for pct, week, n, med, worst, inside in projection.backtest(conn):
                     print(f"  top {100 - float(pct):<5g}{week:>5}{n:>9}{med:>11}%{worst:>10}%{inside:>9}%")
+        elif args.command == "milestones":
+            milestones.backfill(conn, Token())
         elif args.command == "people":
             people.refresh(conn)
             summaries: list[tuple[str, LiteralString]] = [
