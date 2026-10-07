@@ -14,8 +14,10 @@ import json
 import logging
 import os
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
-from epic_parse.db import source_id
+from epic_parse.db import connect, source_id
 from epic_parse.fetch import Fetcher
 
 log = logging.getLogger(__name__)
@@ -23,8 +25,9 @@ log = logging.getLogger(__name__)
 SOURCE = "raiderio"
 BASE = "https://raider.io/api/v1"
 REGION = "us"
-EXPANSIONS = [7, 8, 9, 10, 11]  # Battle for Azeroth through Midnight
-MAIN_SEASON = re.compile(r"^season-(bfa|sl|df|tww|mn)-\d+$")  # skips event variants like '-break-the-meta'
+EXPANSIONS = [6, 7, 8, 9, 10, 11]  # Legion (where Mythic+ began) through Midnight
+MAIN_SEASON = re.compile(r"^season-((bfa|sl|df|tww|mn)-\d+|7\.\d+(\.\d+)?)$")  # Legion slugs are patch numbers
+# ("season-7.3.2"); skips event and post-season variants like '-break-the-meta', 'season-post-legion'
 PERCENTILES = {"p999": 99.9, "p990": 99.0, "p900": 90.0, "p750": 75.0, "p600": 60.0}
 # Lines Raider.IO doesn't publish, interpolated from the season's curve (mplus_score_at).
 # Top 5% is a Blizzard reward tier from Midnight Season 3 (ranked per spec from then on;
@@ -35,7 +38,8 @@ UNKNOWN_REALM = re.compile(r"^Failed to find realm (.+) in region")
 # lists mark as Classic (Raider.IO only covers retail).
 NOT_UNKNOWN_REALM = ("NOT EXISTS (SELECT 1 FROM unknown_realms u WHERE u.region = ch.region AND u.realm = ch.realm)"
                      " AND ch.classic IS NOT TRUE")
-SINCE = "2018-09-01"  # BfA Season 1 start (Raider.IO has no percentile cutoffs before Shadowlands S3)
+SINCE = "2016-07-19"  # patch 7.0.3, which added Mythic+ (Raider.IO scores start at Legion 7.2;
+                      # it has no percentile cutoffs before Shadowlands S3)
 
 # Characters behind retail forum posts. Crawled posts store the posting character as
 # 'Name-realm' in extra.character; v1-imported usernames are 'Name-realm' themselves.
@@ -172,10 +176,12 @@ def _apply_profile(conn, char_id: int, raw_id: int, status: int, body: dict | No
     return True
 
 
-def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float = 1.2, **_) -> None:
+def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float = 1.2, workers: int = 1, **_) -> None:
     """Look up characters that posted in retail forums since SINCE, newest posters first.
 
     Characters looked up within `refresh_days` are skipped. `limit` caps lookups per run.
+    `workers` > 1 runs that many lookups in parallel (each with its own connection and
+    `delay`); Raider.IO can take seconds to answer for characters it hasn't cached.
     """
     src = source_id(conn, SOURCE)
     fetcher = Fetcher(conn, src, delay=delay)
@@ -198,18 +204,44 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                 LIMIT %(limit)s""",
             {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit},
         ).fetchall()
-        log.info("%d characters to look up (seasons: %s)", len(todo), ", ".join(seasons))
-        found = 0
-        for i, (char_id, realm, name) in enumerate(todo, 1):
-            raw_id, body = fetcher.get_json(f"{BASE}/characters/profile", "character",
-                                            params=_params(region=REGION, realm=realm, name=name, fields=fields))
-            status = conn.execute("SELECT status FROM raw_pages WHERE id = %s", (raw_id,)).fetchone()[0]
-            found += _apply_profile(conn, char_id, raw_id, status, body)
-            if i % 100 == 0:
-                log.info("  %d/%d looked up, %d found", i, len(todo), found)
-        log.info("Done: %d/%d characters found on Raider.IO", found, len(todo))
     finally:
         fetcher.close()
+    log.info("%d characters to look up with %d worker(s) (seasons: %s)", len(todo), workers, ", ".join(seasons))
+
+    progress = {"done": 0, "found": 0, "errors": 0}
+    lock = threading.Lock()
+
+    def work(chunk):
+        with connect() as wconn:
+            wfetcher = Fetcher(wconn, src, delay=delay)
+            try:
+                for char_id, realm, name in chunk:
+                    try:
+                        raw_id, body = wfetcher.get_json(
+                            f"{BASE}/characters/profile", "character",
+                            params=_params(region=REGION, realm=realm, name=name, fields=fields))
+                        status = wconn.execute("SELECT status FROM raw_pages WHERE id = %s", (raw_id,)).fetchone()[0]
+                        ok = _apply_profile(wconn, char_id, raw_id, status, body)
+                    except Exception as e:  # one bad character shouldn't stop the run; it's retried next run
+                        log.warning("Lookup failed for %s-%s: %s", name, realm, e)
+                        ok, failed = False, True
+                    else:
+                        failed = False
+                    with lock:
+                        progress["done"] += 1
+                        progress["found"] += ok
+                        progress["errors"] += failed
+                        if progress["done"] % 100 == 0:
+                            log.info("  %d/%d looked up, %d found, %d errors",
+                                     progress["done"], len(todo), progress["found"], progress["errors"])
+            finally:
+                wfetcher.close()
+
+    # Round-robin split keeps every worker on the newest posters first.
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(work, [todo[i::workers] for i in range(workers)]))
+    log.info("Done: %d/%d characters found on Raider.IO (%d errors)",
+             progress["found"], len(todo), progress["errors"])
 
 
 def parse(conn) -> None:

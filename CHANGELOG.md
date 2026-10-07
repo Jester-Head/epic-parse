@@ -22,6 +22,10 @@ versions follow [Semantic Versioning](https://semver.org/).
   players posting in retail forums). Characters on them are no longer looked up.
 
 ### Changed
+- Raider.IO data now starts where Mythic+ did: Legion seasons 7.2–7.3.2 are included and forum
+  posters are considered from patch 7.0.3 (2016-07-19). It previously started at BfA Season 1.
+- Raider.IO lookups can run in parallel (`fetch raiderio --workers N`); Raider.IO often takes
+  seconds to answer for characters it hasn't cached.
 - The owner's characters and labels are ordinary self-reported data (`players.key = 'self:owner'`,
   `gold_labels.confidence = 'self_reported'`), not a gold standard. Weekly snapshots now track
   every self-reported character (e.g. survey respondents), not just gold-labelled players.
