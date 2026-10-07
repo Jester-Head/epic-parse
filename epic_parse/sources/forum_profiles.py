@@ -38,7 +38,7 @@ def _bio_text(html: str | None) -> str | None:
     return re.sub(r"\s+", " ", text) or None
 
 
-def _apply(conn, username: str, raw_id: int, status: int, body: dict | None) -> int:
+def _apply(conn, username: str, raw_id: int, status: int | None, body: dict | None) -> int:
     """Store one profile: account row, its characters, and the account -> character links.
 
     Returns the number of characters listed (0 if the profile is gone).
@@ -120,7 +120,7 @@ def fetch(conn, limit: int | None = None, delay: float = 1.5, refresh_days: int 
         chars = found = 0
         for i, (username,) in enumerate(todo, 1):
             raw_id, body = fetcher.get_json(f"{BASE}/u/{quote(username, safe='')}.json", "user_profile")
-            status = conn.execute("SELECT status FROM raw_pages WHERE id = %s", (raw_id,)).fetchone()[0]
+            status = fetcher.last_status
             n = _apply(conn, username, raw_id, status, body)
             conn.execute("UPDATE raw_pages SET parsed_at = now() WHERE id = %s", (raw_id,))
             chars += n

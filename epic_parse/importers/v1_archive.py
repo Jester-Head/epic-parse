@@ -136,27 +136,27 @@ def _json_text(obj) -> str:
 def load(conn, what: str, path: str) -> int | None:
     """Stream a file into raw_pages. Returns rows loaded, or None if already imported."""
     source_name, kind = KINDS[what]
-    path = Path(path).resolve()
+    file = Path(path).resolve()
     src = source_id(conn, source_name)
-    if conn.execute("SELECT 1 FROM imports WHERE path = %s AND kind = %s", (str(path), kind)).fetchone():
-        log.warning("%s was already imported as %s, skipping", path, kind)
+    if conn.execute("SELECT 1 FROM imports WHERE path = %s AND kind = %s", (str(file), kind)).fetchone():
+        log.warning("%s was already imported as %s, skipping", file, kind)
         return None
-    log.info("Loading %s (%.1f GB) into raw_pages...", path.name, path.stat().st_size / 1e9)
+    log.info("Loading %s (%.1f GB) into raw_pages...", file.name, file.stat().st_size / 1e9)
     n = 0
     with conn.transaction():
         import_id = conn.execute(
-            "INSERT INTO imports (source_id, path, kind) VALUES (%s, %s, %s) RETURNING id", (src, str(path), kind)
+            "INSERT INTO imports (source_id, path, kind) VALUES (%s, %s, %s) RETURNING id", (src, str(file), kind)
         ).fetchone()[0]
         with conn.cursor().copy(
             "COPY raw_pages (source_id, kind, url, status, body, fetched_at, import_id) FROM STDIN"
         ) as copy:
-            for url, body, fetched in READERS[what](path):
+            for url, body, fetched in READERS[what](file):
                 copy.write_row((src, kind, url, 200, _json_text(body), fetched, import_id))
                 n += 1
                 if n % 100_000 == 0:
                     log.info("  %s rows...", f"{n:,}")
         conn.execute("UPDATE imports SET rows = %s, finished_at = now() WHERE id = %s", (n, import_id))
-    log.info("Loaded %s rows from %s", f"{n:,}", path.name)
+    log.info("Loaded %s rows from %s", f"{n:,}", file.name)
     return n
 
 

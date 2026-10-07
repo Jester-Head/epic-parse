@@ -57,6 +57,7 @@ class Token:
                                   timeout=30)
                 resp.raise_for_status()
                 self._value, self._at = resp.json()["access_token"], time.monotonic()
+            assert self._value is not None
             return self._value
 
 
@@ -73,7 +74,7 @@ def _count(key: str):
     return lambda data: {"count": len(data.get(key) or [])}
 
 
-def _get(fetcher: Fetcher, token: Token, path: str, kind: str, transform=None) -> tuple[int, dict | None, int]:
+def _get(fetcher: Fetcher, token: Token, path: str, kind: str, transform=None) -> tuple[int, dict | None, int | None]:
     """GET a Profile API path (or a full href), refreshing the token once on 401."""
     url = path if path.startswith("http") else API + path
     url = url.split("?", 1)[0]  # hrefs carry ?namespace=..., which PROFILE supplies
