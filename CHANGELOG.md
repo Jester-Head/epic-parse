@@ -5,52 +5,88 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-06
+
+Player data: who the forum posters are in the game, and how their Mythic+ seasons went.
+
 ### Added
-- End-of-season projections of the Mythic+ percentile lines (`python -m epic_parse projection
-  [--backtest]`, SQL `mplus_cutoff_projection(season, percentile, date)`): today's value divided by
-  the median share other finished seasons had reached by the same day, with a low-high range.
-  Backtested leave-one-out: top-1% line typically within ~2% at weeks 2-6 and under 1% from week 10.
-  DF Season 1 is left out of the model (thin Raider.IO archive). Raider.IO's site projection isn't
-  in its public API.
-- `snapshot_pace` view: each weekly snapshot with its same-day percentile and the projected final
-  0.1/1/5/10% lines as seen that week, to compare where someone stood before they stopped playing
-  with where the season was heading.
-- Blizzard Profile API source (`fetch bnet`): for forum posters' retail characters, PvP ratings per
-  bracket, honor level, achievement points and the date each achievement was earned, mount/pet/toy
-  counts, lifetime statistics, raid kills with dates, item level and last login (`bnet_characters`,
-  plus raw `bnet_*` pages). Credentials: `BLIZZARD_CLIENT_ID` / `BLIZZARD_CLIENT_SECRET` in `.env`.
-- `Fetcher.get_json(transform=...)` to shrink very large responses before storing them
-  (achievements are ~2 MB per character).
-- Forum profiles source (`fetch profiles` / `parse profiles`): each forum account's public profile
-  with every character on the Battle.net account (realm, class, race, level, achievement points,
-  Classic flag), linked as `player_characters.how = 'account_alias'`, plus account stats and the
-  "About me" text in the new `forum_accounts` table. Blizzard links these characters, so alts are
-  verified rather than guessed.
-- `characters.classic`, `level`, `achievement_points`. Characters flagged Classic are no longer
-  looked up on Raider.IO (it only covers retail).
-- Top-5% Mythic+ line for every season with Raider.IO curve data (`mplus_cutoffs` rows with
-  `percentile = 95`, `derived = true`), interpolated from the season's score curve. Blizzard adds
-  a top-5% reward in Midnight Season 3 (ranked per spec from then on; these lines are for all players).
-- `mplus_score_at(season, percent [, at])`: the score needed for the top N% of a season, the
-  reverse of `mplus_percentile`.
-- `unknown_realms`: realms Raider.IO says don't exist in the US region (mostly Classic realms of
-  players posting in retail forums). Characters on them are no longer looked up.
+
+**Raider.IO** (`fetch raiderio`, `snapshot`)
+- Mythic+ seasons from Legion 7.2 through Midnight (`mplus_seasons`) and each season's percentile
+  cutoffs (`mplus_cutoffs`: top 0.1/1/10/25/40%, plus an interpolated top 5%, marked `derived`).
+- Full score curves per season (`mplus_percentile_points`: percentile lines, "timed all dungeons
+  at +N" and keystone achievement thresholds) and how the lines moved day by day
+  (`mplus_cutoff_history`).
+- Character lookups for everyone who posted in a retail forum since patch 7.0.3, newest posters
+  first: class, spec, race, faction, score for every season and raid progress (`characters`).
+  Lookups can run in parallel (`--workers N`); a free app key (`RAIDERIO_KEY` in `.env`) raises
+  the rate limit.
+- Weekly snapshots of tracked characters' score, item level, runs and spec
+  (`character_snapshots`), run by a Windows scheduled task ("Epic-Parse weekly Raider.IO
+  snapshot", Tuesdays 9 AM). Raider.IO only keeps final scores for past seasons, so the weekly
+  history is what shows when someone slowed down or stopped.
+- `unknown_realms`: realms Raider.IO says don't exist in the US (mostly Classic realms); characters
+  on them are skipped.
+
+**Percentiles and projections** (SQL)
+- `mplus_percentile(season, score [, date])`: share of players at or above a score, against the
+  final distribution or the lines as they stood on a given date.
+- `mplus_score_at(season, percent [, date])`: the reverse, e.g. the top-5% score.
+- End-of-season projections of each line (`python -m epic_parse projection [--backtest]`,
+  `mplus_cutoff_projection(season, percentile, date)`): today's value divided by the median share
+  other finished seasons had reached by the same day, with a low-high range. Backtested
+  leave-one-out: the top-1% line is typically within ~2% at weeks 2-6 and under 1% from week 10.
+  DF Season 1 is left out of the model (thin Raider.IO archive). Raider.IO's own site projection
+  isn't in its public API.
+- `snapshot_pace` view: every weekly snapshot (including scores of 0) with its same-day
+  percentile and the projected final 0.1/1/5/10% lines as seen that week.
+- `season_rules` (rating system, Keystone Master requirement, key squishes per season; unverified
+  fields left empty) and `season_events` (score-moving events like Turbo Boost).
+- Blizzard adds a top-5% Mythic+ reward in Midnight Season 3, ranked per spec from then on; the
+  lines here are for all players.
+
+**Players and alts**
+- `players`, `player_characters` and `gold_labels` tables. Each forum account is a player linked
+  to the characters it posted as (`forum_alias`); people can also report their own characters
+  (`self_reported`). `realm_slug()` matches realm names written different ways.
+- Forum profiles source (`fetch profiles`): each forum account's public profile lists every
+  character on its Battle.net account (realm, class, race, level, achievement points, Classic
+  flag), linked as `account_alias`, so alts are verified rather than guessed. Account stats and
+  the "About me" text go in `forum_accounts`.
+- `characters.classic`, `level`, `achievement_points`; Classic characters are skipped on
+  Raider.IO, which only covers retail.
+
+**Blizzard Profile API** (`fetch bnet`)
+- For forum posters' retail characters: PvP ratings per bracket, honor level, achievement points
+  and the date each achievement was earned, mount/pet/toy counts, lifetime statistics, raid kills
+  with dates, item level and last login (`bnet_characters`, plus raw `bnet_*` pages). Credentials:
+  `BLIZZARD_CLIENT_ID` / `BLIZZARD_CLIENT_SECRET` in `.env`.
+- `Fetcher.get_json(transform=...)` shrinks very large responses before storing them
+  (achievements are ~2 MB per character; ~23 KB after).
+
+**Analysis and research**
+- `analysis/stopping_early.py`: charts (PNG + CSV) for the planned blog post "Why stopping early
+  costs you rank", from aggregate Raider.IO cutoff data. Needs `pip install -e .[analysis]`
+  (matplotlib).
+- Pilot survey (`docs/survey/`, **on hold**, not sent out): questions, consent text, codebook and a
+  Google Apps Script that builds the form. Revised for neutral wording (no assumption that everyone pushes keys), standard
+  survey structure, per-patch play-amount grids, separate unrated and rated PvP, and first-person
+  project wording.
 
 ### Changed
-- Raider.IO data now starts where Mythic+ did: Legion seasons 7.2–7.3.2 are included and forum
-  posters are considered from patch 7.0.3 (2016-07-19). It previously started at BfA Season 1.
-- Raider.IO lookups can run in parallel (`fetch raiderio --workers N`); Raider.IO often takes
-  seconds to answer for characters it hasn't cached.
+- Raider.IO data starts where Mythic+ did: Legion seasons are included and forum posters are
+  considered from patch 7.0.3 (2016-07-19). It previously started at BfA Season 1.
 - The owner's characters and labels are ordinary self-reported data (`players.key = 'self:owner'`,
-  `gold_labels.confidence = 'self_reported'`), not a gold standard. Weekly snapshots now track
-  every self-reported character (e.g. survey respondents), not just gold-labelled players.
+  `gold_labels.confidence = 'self_reported'`), not a gold standard. Weekly snapshots track every
+  self-reported character (e.g. survey respondents).
+- Blog drafts (`docs/blog/`) are kept in their own local repository and ignored here.
 
 ### Fixed
-- Raider.IO's empty season-start points (score 0) are no longer stored in the cutoff history.
-- A successful Raider.IO snapshot now marks the character as found and fills in class, spec, race,
+- A successful Raider.IO snapshot marks the character as found and fills in class, spec, race,
   faction and the current-season score (1,181 characters were stuck as "not looked up").
-- Seasons Raider.IO has no cutoffs for (BfA S1–4, Shadowlands S1–2) are no longer requested on
-  every run (`mplus_seasons.has_cutoffs`).
+- Seasons Raider.IO has no cutoffs for (Legion, BfA S1-4, Shadowlands S1-2) are no longer requested
+  on every run (`mplus_seasons.has_cutoffs`).
+- Raider.IO's empty season-start points (score 0) are no longer stored in the cutoff history.
 - Realms parsed from forum usernames no longer keep a trailing account number
   (`wyrmrest-accord-3387509`); 1,551 posts corrected.
 
@@ -125,6 +161,8 @@ Restart of the project on PostgreSQL. The v1 code is preserved in git tag `v1-ar
 The original version: Scrapy spider for the Blizzard forums, YouTube API comment scraper, Reddit
 and Wowhead scrapers, MongoDB storage, and Jupyter notebooks for jargon and sentiment analysis.
 
-[0.3.0]: https://github.com/Jester-Head/epic-parse/compare/v1-archive...main
-[0.2.0]: https://github.com/Jester-Head/epic-parse/compare/v1-archive...main
+[Unreleased]: https://github.com/Jester-Head/epic-parse/compare/12a5fb1...main
+[0.4.0]: https://github.com/Jester-Head/epic-parse/compare/f8575c3...12a5fb1
+[0.3.0]: https://github.com/Jester-Head/epic-parse/compare/ad9ef07...f8575c3
+[0.2.0]: https://github.com/Jester-Head/epic-parse/compare/v1-archive...ad9ef07
 [0.1.0]: https://github.com/Jester-Head/epic-parse/tree/v1-archive
