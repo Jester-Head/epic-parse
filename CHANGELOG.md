@@ -5,6 +5,19 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- One row per person (`python -m epic_parse people`, also rebuilt by every weekly snapshot):
+  - `people`: each forum account (or self-reported player) with forum activity, character counts
+    (retail / Classic / found on Raider.IO / shared with another account), main character, Mythic+
+    history (seasons played, best percentile, peak tier, current season), best PvP rating, honor
+    level, achievement points, collections and last login. Account-wide values take the max over
+    the person's characters.
+  - `player_seasons`: one row per person per Mythic+ season with their best retail character,
+    score, percentile, tier, elite flag (top 0.1%) and how many of their characters had a score.
+  - `mplus_tier(season, score)`: hardcore = top 1%, mid2 = top 5%, mid1 = Keystone Legend (top 20%
+    in seasons without it), casual = any lower score; NULL for seasons without percentile data.
+- Index on `player_characters (character_id)`.
+
 ## [0.4.0] - 2026-10-06
 
 Player data: who the forum posters are in the game, and how their Mythic+ seasons went.

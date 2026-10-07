@@ -83,6 +83,22 @@ SELECT * FROM mplus_cutoff_projection('season-mn-2', 99);
 SELECT name, realm, taken_at, score, pct_same_day, proj_top_1, proj_top_5 FROM snapshot_pace;
 ```
 
+## One row per person
+
+```bash
+python -m epic_parse people     # rebuild people / player_seasons (the weekly snapshot does this too)
+```
+
+Raider.IO, the Blizzard API and the forums describe characters; `people` combines each forum
+account's characters (posted as, listed on the profile, or self-reported) into one row: forum
+activity, characters, Mythic+ history and tier, PvP and collections. `player_seasons` has one row
+per person per Mythic+ season with their best character.
+
+```sql
+SELECT forum_username, main_character, peak_tier, best_pct, current_tier, pvp_best_rating, mounts
+FROM people WHERE current_score IS NOT NULL ORDER BY current_score DESC LIMIT 20;
+```
+
 ## Patch tagging
 
 Every forum post gets `game_version` (retail / classic / forever), `expansion` and, for retail,
@@ -152,6 +168,7 @@ epic_parse/sources/forum_profiles.py  forum account profiles: alts, account stat
 epic_parse/sources/raiderio.py        Raider.IO seasons, cutoffs, character lookups, weekly snapshots
 epic_parse/wow_patches.py             patch dates and game version / expansion / patch tagging
 epic_parse/projection.py              end-of-season Mythic+ cutoff projections and backtest
+epic_parse/people.py                  one row per person (people, player_seasons)
 epic_parse/importers/v1_archive.py    one-off importers for v1 data files
 scripts/backup.ps1                    database backup (run weekly by Task Scheduler)
 ```

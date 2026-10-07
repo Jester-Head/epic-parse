@@ -344,6 +344,7 @@ CREATE TABLE IF NOT EXISTS player_characters (
     role         text,                    -- e.g. 'main this season', 'occasional alt'
     PRIMARY KEY (player_id, character_id)
 );
+CREATE INDEX IF NOT EXISTS player_characters_character ON player_characters (character_id);
 
 -- Human-confirmed labels: the ground truth classifiers are tested against.
 -- season NULL = applies to the player in general.
@@ -421,5 +422,87 @@ SELECT s.character_id, ch.name, ch.realm, s.season, s.taken_at, s.score, s.item_
        (SELECT projected FROM mplus_cutoff_projection(s.season, 95,   s.taken_at)) AS proj_top_5,
        (SELECT projected FROM mplus_cutoff_projection(s.season, 90,   s.taken_at)) AS proj_top_10
 FROM character_snapshots s JOIN characters ch ON ch.id = s.character_id;
+
+-- Mythic+ commitment tier for a season score:
+--   hardcore = top 1% (elite = top 0.1%, flagged separately), mid2 = top 5%,
+--   mid1 = Keystone Legend (seasons without it on Raider.IO: top 20%), casual = any lower score,
+--   none = no score. NULL when the season has no percentile data (Legion, BfA, Shadowlands S1-2).
+CREATE OR REPLACE FUNCTION mplus_tier(p_season text, p_score numeric) RETURNS text
+LANGUAGE sql STABLE AS $$
+    SELECT CASE
+        WHEN coalesce(p_score, 0) <= 0 THEN 'none'
+        WHEN x.pct IS NULL THEN NULL
+        WHEN x.pct <= 1 THEN 'hardcore'
+        WHEN x.pct <= 5 THEN 'mid2'
+        WHEN (x.ksl IS NOT NULL AND p_score >= x.ksl) OR (x.ksl IS NULL AND x.pct <= 20) THEN 'mid1'
+        ELSE 'casual'
+    END
+    FROM (SELECT mplus_percentile(p_season, p_score) AS pct,
+                 (SELECT min_score FROM mplus_percentile_points
+                  WHERE season = p_season AND point = 'keystoneLegend') AS ksl) x
+$$;
+
+-- One row per person per Mythic+ season they have a score in (rebuilt by epic_parse.people.refresh).
+-- A person's season = their best retail character that season; alts with a score are counted.
+-- pct is against the season's final distribution (for the running season: as it stands now).
+CREATE TABLE IF NOT EXISTS player_seasons (
+    player_id             bigint,
+    season                text,
+    best_character_id     bigint,
+    best_character        text,                 -- 'Name-realm'
+    class                 text,
+    score                 numeric,
+    pct                   numeric,              -- top N% (of characters with a score)
+    tier                  text,                 -- mplus_tier()
+    elite                 boolean,              -- top 0.1%
+    characters_with_score int,
+    provisional           boolean,              -- season still running
+    PRIMARY KEY (player_id, season)
+);
+
+-- One row per person: a forum account (or self-reported player) with everything known about
+-- them across their characters and sources (rebuilt by epic_parse.people.refresh).
+CREATE TABLE IF NOT EXISTS people (
+    player_id           bigint PRIMARY KEY,
+    key                 text,
+    forum_username      text,
+    -- forum
+    account_created     timestamptz,
+    forum_post_count    int,                    -- Blizzard's lifetime count
+    posts_collected     int,                    -- posts in this database
+    first_post          timestamptz,
+    last_post           timestamptz,
+    retail_post_share   numeric,                -- share of collected posts in retail forums
+    top_category        text,
+    -- characters
+    characters          int,
+    retail_characters   int,
+    classic_characters  int,
+    raiderio_found      int,
+    shared_characters   int,                    -- also linked to another account (rename/transfer?)
+    main_character      text,                   -- best character in their latest M+ season, else highest level/achievements
+    main_class          text,
+    -- Mythic+ (Raider.IO)
+    mplus_seasons       int,                    -- seasons with a score
+    first_mplus_season  text,
+    last_mplus_season   text,
+    best_pct            numeric,
+    best_pct_season     text,
+    peak_tier           text,                   -- best tier any season; 'none' = no M+ score, 'no_pct_data' = only
+                                                -- scores in seasons without percentiles, NULL = not looked up yet
+    current_score       numeric,
+    current_pct         numeric,
+    current_tier        text,                   -- provisional while the season runs
+    -- Blizzard API (account-wide values: max over characters)
+    pvp_best_rating     int,                    -- current PvP season, any bracket
+    pvp_best_bracket    text,
+    honor_level         int,
+    achievement_points  int,
+    mounts              int,
+    pets                int,
+    toys                int,
+    last_login          timestamptz,
+    refreshed_at        timestamptz NOT NULL DEFAULT now()
+);
 
 INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio'), ('blizzard_api') ON CONFLICT DO NOTHING;

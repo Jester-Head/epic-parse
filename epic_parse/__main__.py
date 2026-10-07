@@ -10,12 +10,13 @@
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
   tag-patches [--overwrite]       tag forum posts with game version / expansion / patch
   projection [--season S] [--backtest]  projected end-of-season Mythic+ cutoffs
+  people                          rebuild the one-row-per-person tables and summarize them
   stats                           row counts per table
 """
 import argparse
 import logging
 
-from epic_parse import db, projection, wow_patches
+from epic_parse import db, people, projection, wow_patches
 from epic_parse.importers import v1_archive
 from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio
 
@@ -57,6 +58,8 @@ def main() -> None:
     p_proj.add_argument("--season", help="Raider.IO season slug (default: the current one)")
     p_proj.add_argument("--backtest", action="store_true", help="also show how accurate past projections were")
 
+    sub.add_parser("people", help="rebuild people / player_seasons (one row per person) and summarize")
+
     sub.add_parser("stats", help="show row counts")
 
     args = parser.parse_args()
@@ -94,6 +97,14 @@ def main() -> None:
                 print(f"  {'line':<9}{'week':>5}{'seasons':>9}{'median err':>12}{'worst err':>11}{'in range':>10}")
                 for pct, week, n, med, worst, inside in projection.backtest(conn):
                     print(f"  top {100 - float(pct):<5g}{week:>5}{n:>9}{med:>11}%{worst:>10}%{inside:>9}%")
+        elif args.command == "people":
+            people.refresh(conn)
+            for label, sql in [
+                ("people", "SELECT count(*), count(*) FILTER (WHERE characters > 0), count(*) FILTER (WHERE raiderio_found > 0) FROM people"),
+                ("peak Mythic+ tier", "SELECT coalesce(peak_tier, 'unknown'), count(*) FROM people GROUP BY 1 ORDER BY 2 DESC"),
+                ("current season tier (provisional)", "SELECT coalesce(current_tier, '(no score)'), count(*) FROM people GROUP BY 1 ORDER BY 2 DESC"),
+            ]:
+                print(f"{label}: {conn.execute(sql).fetchall()}")
         elif args.command == "stats":
             for table in ("raw_pages", "threads", "posts"):
                 count = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
