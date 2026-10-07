@@ -24,6 +24,7 @@ class Fetcher:
         self.max_retries = max_retries
         self.client = httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=True)
         self._last_request = 0.0
+        self.last_status: int | None = None
 
     def _wait(self) -> None:
         elapsed = time.monotonic() - self._last_request
@@ -31,8 +32,12 @@ class Fetcher:
             time.sleep(self.delay - elapsed)
         self._last_request = time.monotonic()
 
-    def get_json(self, url: str, kind: str, params=None) -> tuple[int, dict | None]:
-        """GET a JSON endpoint and save it. Returns (raw_page_id, parsed JSON or None)."""
+    def get_json(self, url: str, kind: str, params=None, transform=None) -> tuple[int, dict | None]:
+        """GET a JSON endpoint and save it. Returns (raw_page_id, parsed JSON or None).
+
+        `transform`, if given, reduces a successful response before it is saved (and returned),
+        for responses too big to keep whole. The HTTP status is left in `self.last_status`.
+        """
         for attempt in range(1, self.max_retries + 1):
             self._wait()
             try:
@@ -54,6 +59,9 @@ class Fetcher:
             data = resp.json()
         except ValueError:
             data = None
+        if transform is not None and resp.status_code == 200 and data is not None:
+            data = transform(data)
+        self.last_status = resp.status_code
         with self.conn.transaction():
             raw_id = self.conn.execute(
                 "INSERT INTO raw_pages (source_id, kind, url, status, body) VALUES (%s, %s, %s, %s, %s) RETURNING id",

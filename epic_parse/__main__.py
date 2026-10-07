@@ -4,6 +4,7 @@
   fetch blizzard [options]        download forum data into raw_pages
   fetch raiderio [--limit N] [--workers N]  look up forum posters' characters on Raider.IO
   fetch profiles [--limit N]      forum account profiles: every character on the account, About me
+  fetch bnet [--limit N] [--workers N]  Blizzard Profile API: PvP, achievements, collections, stats
   snapshot [--limit N]            weekly Raider.IO snapshot of tracked characters
   parse blizzard|raiderio         turn raw pages into rows
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
@@ -15,9 +16,9 @@ import logging
 
 from epic_parse import db, wow_patches
 from epic_parse.importers import v1_archive
-from epic_parse.sources import blizzard_forums, forum_profiles, raiderio
+from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio
 
-SOURCES = {"blizzard": blizzard_forums, "profiles": forum_profiles, "raiderio": raiderio}
+SOURCES = {"blizzard": blizzard_forums, "bnet": blizzard_api, "profiles": forum_profiles, "raiderio": raiderio}
 
 
 def main() -> None:
@@ -34,7 +35,7 @@ def main() -> None:
     p_fetch.add_argument("--max-pages", type=int, help="topic-list pages per category (30 topics each)")
     p_fetch.add_argument("--max-topics", type=int, help="stop after this many new/changed topics")
     p_fetch.add_argument("--limit", type=int, help="raiderio / profiles: max lookups this run")
-    p_fetch.add_argument("--workers", type=int, help="raiderio: lookups to run in parallel (default 1)")
+    p_fetch.add_argument("--workers", type=int, help="raiderio / bnet: lookups to run in parallel (default 1 raiderio, 4 bnet)")
     p_fetch.add_argument("--delay", type=float, help="seconds between requests (default: 1.5 forums and profiles, 1.2 raiderio)")
 
     p_parse = sub.add_parser("parse", help="turn unparsed raw pages into threads/posts rows")

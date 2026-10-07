@@ -56,6 +56,16 @@ race, level, achievement points, Classic or retail). They're stored in `characte
 the account in `player_characters` (`how = 'account_alias'`); account stats and "About me" go in
 `forum_accounts`. Expect many forum characters to have no Raider.IO data and vice versa.
 
+## Blizzard Profile API
+
+```bash
+python -m epic_parse fetch bnet         # needs BLIZZARD_CLIENT_ID / BLIZZARD_CLIENT_SECRET in .env
+```
+
+For forum posters' retail characters: PvP ratings, achievements with dates, collections, lifetime
+statistics, raid kills, item level and last login (`bnet_characters`; details in raw `bnet_*` pages).
+Characters that haven't logged in for a long time return "not found" from Blizzard.
+
 ## Patch tagging
 
 Every forum post gets `game_version` (retail / classic / forever), `expansion` and, for retail,

@@ -350,4 +350,27 @@ ALTER TABLE characters ADD COLUMN IF NOT EXISTS classic boolean;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS level int;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS achievement_points int;
 
-INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio') ON CONFLICT DO NOTHING;
+-- Blizzard Profile API (blizzard_api source): what Raider.IO doesn't have. One row per looked-up
+-- character; achievements (with dates), statistics and raid kills stay in raw_pages
+-- (kinds 'bnet_achievements', 'bnet_statistics', 'bnet_raids').
+CREATE TABLE IF NOT EXISTS bnet_characters (
+    character_id           bigint PRIMARY KEY REFERENCES characters,
+    found                  boolean,           -- false = 404: long inactive, very low level, or renamed/moved
+    level                  int,
+    last_login             timestamptz,
+    item_level             int,               -- equipped
+    achievement_points     int,
+    achievements_completed int,
+    guild                  text,
+    active_spec            text,
+    honor_level            int,
+    honorable_kills        int,
+    pvp                    jsonb NOT NULL DEFAULT '{}',  -- {"ARENA_3v3": {"rating": 2104, "played": 210, "won": 118, "season": 40}, ...}
+    mounts                 int,
+    pets                   int,
+    toys                   int,
+    fetched_at             timestamptz,
+    raw_page_id            bigint             -- the summary response
+);
+
+INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio'), ('blizzard_api') ON CONFLICT DO NOTHING;
