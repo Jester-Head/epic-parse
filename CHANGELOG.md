@@ -6,6 +6,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Blizzard Profile API source (`fetch bnet`): for forum posters' retail characters, PvP ratings per
+  bracket, honor level, achievement points and the date each achievement was earned, mount/pet/toy
+  counts, lifetime statistics, raid kills with dates, item level and last login (`bnet_characters`,
+  plus raw `bnet_*` pages). Credentials: `BLIZZARD_CLIENT_ID` / `BLIZZARD_CLIENT_SECRET` in `.env`.
+- `Fetcher.get_json(transform=...)` to shrink very large responses before storing them
+  (achievements are ~2 MB per character).
 - Forum profiles source (`fetch profiles` / `parse profiles`): each forum account's public profile
   with every character on the Battle.net account (realm, class, race, level, achievement points,
   Classic flag), linked as `player_characters.how = 'account_alias'`, plus account stats and the
