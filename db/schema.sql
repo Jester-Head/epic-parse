@@ -379,10 +379,16 @@ CREATE TABLE IF NOT EXISTS forum_accounts (
     fetched_at      timestamptz,
     raw_page_id     bigint
 );
+ALTER TABLE forum_accounts ADD COLUMN IF NOT EXISTS failures int NOT NULL DEFAULT 0;  -- see characters.raiderio_failures
 
 -- From the forum alias lists: whether a character is on Classic, its level and achievement
 -- points. Raider.IO only covers retail, so classic = true characters aren't looked up there.
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS classic boolean;
+-- Lookups that still failed after all retries (network errors, the API not answering).
+-- Characters with a failure are skipped by later runs unless `fetch ... --retry-failed`;
+-- any real answer (found or not found) resets the count.
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS raiderio_failures int NOT NULL DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS bnet_failures int NOT NULL DEFAULT 0;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS level int;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS achievement_points int;
 

@@ -55,6 +55,17 @@ CANDIDATES_SQL = """
 """
 
 
+def load_candidates(conn) -> int:
+    """Put CANDIDATES_SQL's rows in a temp table `candidates` (with statistics) for this session.
+
+    Joining the subquery directly let Postgres badly misjudge its size; with a LIMIT it chose a
+    nested loop that re-scanned every post and could run for hours. Returns the row count.
+    """
+    conn.execute("DROP TABLE IF EXISTS candidates")
+    n = conn.execute(f"CREATE TEMP TABLE candidates AS {CANDIDATES_SQL}", {"since": SINCE}).rowcount
+    conn.execute("ANALYZE candidates")
+    return n
+
 def _params(**params):
     key = os.environ.get("RAIDERIO_KEY")
     return {**params, "access_key": key} if key else params
@@ -153,7 +164,7 @@ def _record_not_found(conn, char_id: int, raw_id: int) -> None:
                      (REGION, m.group(1)))
         conn.execute("UPDATE characters SET found = false WHERE region = %s AND realm = %s AND found IS NULL",
                      (REGION, m.group(1)))
-    conn.execute("UPDATE characters SET found = false, looked_up_at = now(), raw_page_id = %s "
+    conn.execute("UPDATE characters SET found = false, looked_up_at = now(), raw_page_id = %s, raiderio_failures = 0 "
                  "WHERE id = %s AND found IS NOT TRUE", (raw_id, char_id))
 
 
@@ -170,7 +181,7 @@ def _apply_profile(conn, char_id: int, raw_id: int, status: int | None, body: di
     }
     conn.execute(
         """UPDATE characters SET found = true, class = %s, spec = %s, race = %s, faction = %s,
-               mplus = %s::jsonb, raid = %s::jsonb, looked_up_at = now(), raw_page_id = %s
+               mplus = %s::jsonb, raid = %s::jsonb, looked_up_at = now(), raw_page_id = %s, raiderio_failures = 0
            WHERE id = %s""",
         (body.get("class"), body.get("active_spec_name"), body.get("race"), body.get("faction"),
          json.dumps(mplus), json.dumps(raid), raw_id, char_id),
@@ -178,12 +189,14 @@ def _apply_profile(conn, char_id: int, raw_id: int, status: int | None, body: di
     return True
 
 
-def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float = 1.2, workers: int = 1, **_) -> None:
+def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float = 1.2, workers: int = 1,
+          retry_failed: bool = False, **_) -> None:
     """Look up characters that posted in retail forums since SINCE, newest posters first.
 
     Characters looked up within `refresh_days` are skipped. `limit` caps lookups per run.
     `workers` > 1 runs that many lookups in parallel (each with its own connection and
     `delay`); Raider.IO can take seconds to answer for characters it hasn't cached.
+    Characters whose lookup failed after all retries are skipped unless `retry_failed`.
     """
     src = source_id(conn, SOURCE)
     fetcher = Fetcher(conn, src, delay=delay)
@@ -191,20 +204,22 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
         seasons = _fetch_seasons(conn, fetcher)
         fields = "mythic_plus_scores_by_season:" + ":".join(seasons) + \
                  ",raid_progression:current-expansion:previous-expansion"
+        load_candidates(conn)
         conn.execute(
             f"""INSERT INTO characters (region, realm, name)
-                SELECT %(region)s, realm, name FROM ({CANDIDATES_SQL}) c WHERE name <> '' AND realm <> ''
+                SELECT %(region)s, realm, name FROM candidates c WHERE name <> '' AND realm <> ''
                 ON CONFLICT DO NOTHING""",
             {"region": REGION, "since": SINCE},
         )
         todo = conn.execute(
             f"""SELECT ch.id, ch.realm, ch.name
-                FROM characters ch JOIN ({CANDIDATES_SQL}) c ON c.realm = ch.realm AND lower(c.name) = lower(ch.name)
+                FROM characters ch JOIN candidates c ON c.realm = ch.realm AND lower(c.name) = lower(ch.name)
                 WHERE ch.region = %(region)s AND {NOT_UNKNOWN_REALM}
+                  AND (%(retry)s OR ch.raiderio_failures = 0)
                   AND (ch.looked_up_at IS NULL OR ch.looked_up_at < now() - make_interval(days => %(days)s))
                 ORDER BY c.last_post DESC
                 LIMIT %(limit)s""",
-            {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit},
+            {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit, "retry": retry_failed},
         ).fetchall()
     finally:
         fetcher.close()
@@ -224,8 +239,9 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                             params=_params(region=REGION, realm=realm, name=name, fields=fields))
                         status = wfetcher.last_status
                         ok = _apply_profile(wconn, char_id, raw_id, status, body)
-                    except Exception as e:  # one bad character shouldn't stop the run; it's retried next run
-                        log.warning("Lookup failed for %s-%s: %s", name, realm, e)
+                    except Exception as e:  # one bad character shouldn't stop the run
+                        log.warning("Lookup failed for %s-%s, skipped from now on (--retry-failed): %s", name, realm, e)
+                        wconn.execute("UPDATE characters SET raiderio_failures = raiderio_failures + 1 WHERE id = %s", (char_id,))
                         ok, failed = False, True
                     else:
                         failed = False
@@ -337,7 +353,7 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
         _fetch_seasons(conn, fetcher)  # also refreshes the current season's cutoffs and history
         season = current_season(conn)
         if season is None:
-            log.warning("No active M+ season found; skipping snapshot")
+            log.warning("No running Mythic+ season on Raider.IO; skipping the snapshot")
             return
         link_forum_players(conn)
         targets = conn.execute(
@@ -354,6 +370,7 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                SELECT ch.id, ch.realm, ch.name FROM characters ch
                LEFT JOIN season_posters sp ON sp.realm = ch.realm AND sp.lname = lower(ch.name)
                WHERE ch.region = %(region)s AND ch.found IS DISTINCT FROM false AND {NOT_UNKNOWN_REALM}
+                 AND ch.raiderio_failures = 0
                  AND NOT EXISTS (SELECT 1 FROM character_snapshots s
                                  WHERE s.character_id = ch.id AND s.taken_at > now() - interval '5 days')
                  AND (ch.id IN (SELECT character_id FROM named)
@@ -365,11 +382,16 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
         log.info("Snapshotting %d characters for %s", len(targets), season)
         taken = 0
         for i, (char_id, realm, name) in enumerate(targets, 1):
-            raw_id, body = fetcher.get_json(
-                f"{BASE}/characters/profile", "snapshot",
-                params=_params(region=REGION, realm=realm, name=name,
-                               fields=f"mythic_plus_scores_by_season:{season},gear,mythic_plus_best_runs:all"),
-            )
+            try:
+                raw_id, body = fetcher.get_json(
+                    f"{BASE}/characters/profile", "snapshot",
+                    params=_params(region=REGION, realm=realm, name=name,
+                                   fields=f"mythic_plus_scores_by_season:{season},gear,mythic_plus_best_runs:all"),
+                )
+            except Exception as e:  # one bad character shouldn't stop the weekly snapshot
+                log.warning("Snapshot failed for %s-%s, skipped from now on (fetch --retry-failed): %s", name, realm, e)
+                conn.execute("UPDATE characters SET raiderio_failures = raiderio_failures + 1 WHERE id = %s", (char_id,))
+                continue
             if not body:
                 _record_not_found(conn, char_id, raw_id)
                 continue
