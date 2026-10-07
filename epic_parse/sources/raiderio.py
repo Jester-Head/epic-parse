@@ -17,7 +17,7 @@ import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from epic_parse import people, projection
+from epic_parse import milestones, people, projection
 from epic_parse.db import connect, source_id
 from epic_parse.fetch import Fetcher
 
@@ -203,7 +203,8 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
     try:
         seasons = _fetch_seasons(conn, fetcher)
         fields = "mythic_plus_scores_by_season:" + ":".join(seasons) + \
-                 ",raid_progression:current-expansion:previous-expansion"
+                 ",raid_progression:current-expansion:previous-expansion,mythic_plus_best_runs:all"
+        season_now = current_season(conn)  # best runs are for the running season
         load_candidates(conn)
         conn.execute(
             f"""INSERT INTO characters (region, realm, name)
@@ -239,6 +240,8 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                             params=_params(region=REGION, realm=realm, name=name, fields=fields))
                         status = wfetcher.last_status
                         ok = _apply_profile(wconn, char_id, raw_id, status, body)
+                        if ok:
+                            milestones.store_best_runs(wconn, char_id, season_now, body)
                     except Exception as e:  # one bad character shouldn't stop the run
                         log.warning("Lookup failed for %s-%s, skipped from now on (--retry-failed): %s", name, realm, e)
                         wconn.execute("UPDATE characters SET raiderio_failures = raiderio_failures + 1 WHERE id = %s", (char_id,))
@@ -404,6 +407,7 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                  len(body.get("mythic_plus_best_runs") or []), body.get("active_spec_name"), raw_id),
             )
             _mark_found_from_snapshot(conn, char_id, season, score, body)
+            milestones.store_best_runs(conn, char_id, season, body)
             taken += 1
             if i % 100 == 0:
                 log.info("  %d/%d", i, len(targets))

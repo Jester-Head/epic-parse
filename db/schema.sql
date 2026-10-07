@@ -435,17 +435,21 @@ FROM character_snapshots s JOIN characters ch ON ch.id = s.character_id;
 -- has no percentile data (Legion, BfA, Shadowlands S1-2). Milestones like Keystone Legend are kept
 -- separately (mplus_milestones): their difficulty varied between seasons (Legend was ~top 15% to
 -- ~top 29%), and keeping them out of the tier lets "do people stop after Legend?" be asked directly.
-CREATE OR REPLACE FUNCTION mplus_tier(p_season text, p_score numeric) RETURNS text
-LANGUAGE sql STABLE AS $$
+-- The band for an already-computed percentile (lets bulk queries compute the percentile once).
+CREATE OR REPLACE FUNCTION mplus_tier_for_pct(p_score numeric, p_pct numeric) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
     SELECT CASE
         WHEN coalesce(p_score, 0) <= 0 THEN 'none'
-        WHEN x.pct IS NULL THEN NULL
-        WHEN x.pct <= 1 THEN 'hardcore'
-        WHEN x.pct <= 5 THEN 'mid2'
-        WHEN x.pct <= 20 THEN 'mid1'
+        WHEN p_pct IS NULL THEN NULL
+        WHEN p_pct <= 1 THEN 'hardcore'
+        WHEN p_pct <= 5 THEN 'mid2'
+        WHEN p_pct <= 20 THEN 'mid1'
         ELSE 'casual'
     END
-    FROM (SELECT mplus_percentile(p_season, p_score) AS pct) x
+$$;
+CREATE OR REPLACE FUNCTION mplus_tier(p_season text, p_score numeric) RETURNS text
+LANGUAGE sql STABLE AS $$
+    SELECT mplus_tier_for_pct(p_score, mplus_percentile(p_season, p_score))
 $$;
 
 -- Keystone achievements a season score qualifies for (Explorer, Conqueror, Master, Hero, Legend,
@@ -528,5 +532,50 @@ CREATE TABLE IF NOT EXISTS people (
 ALTER TABLE people ADD COLUMN IF NOT EXISTS best_milestone text;          -- highest keystone achievement any season
 ALTER TABLE people ADD COLUMN IF NOT EXISTS best_milestone_season text;
 ALTER TABLE people ADD COLUMN IF NOT EXISTS current_milestone text;
+
+-- Season keystone achievements on Blizzard (Keystone Explorer ... Myth), mapped to Raider.IO season
+-- slugs; Legion's expansion-wide Keystone Master / Conqueror have season NULL (epic_parse.milestones).
+CREATE TABLE IF NOT EXISTS milestone_achievements (
+    achievement_id int PRIMARY KEY,
+    name           text,                  -- e.g. 'The War Within Keystone Legend: Season Two'
+    milestone      text,                  -- e.g. 'Keystone Legend'
+    season         text                   -- Raider.IO slug
+);
+
+-- When a character's account earned each milestone (Blizzard achievements are account-wide, so it
+-- may have been on another character of the same account).
+CREATE TABLE IF NOT EXISTS character_milestones (
+    character_id   bigint,
+    achievement_id int,
+    milestone      text,
+    season         text,
+    achieved_at    timestamptz,
+    PRIMARY KEY (character_id, achievement_id)
+);
+CREATE INDEX IF NOT EXISTS character_milestones_season ON character_milestones (season, milestone);
+
+-- Best Mythic+ run per dungeon with its completion date, as seen by Raider.IO lookups and weekly
+-- snapshots. Only current bests are visible at any moment (earlier, beaten runs are not), and every
+-- best ever seen is kept, so repeated snapshots record each upgrade.
+CREATE TABLE IF NOT EXISTS character_best_runs (
+    character_id    bigint,
+    keystone_run_id bigint,
+    season          text,
+    dungeon         text,                 -- Raider.IO short name, e.g. 'MR'
+    mythic_level    int,
+    score           numeric,
+    completed_at    timestamptz,
+    clear_time_ms   bigint,
+    par_time_ms     bigint,
+    upgrades        int,                  -- keystone levels gained (0 = depleted)
+    spec            text,
+    role            text,
+    first_seen      timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (character_id, keystone_run_id)
+);
+CREATE INDEX IF NOT EXISTS character_best_runs_season ON character_best_runs (season, completed_at);
+
+ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS milestone_dates jsonb;   -- {"Keystone Master": "2026-09-02T...", ...}
+ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS last_best_run_at timestamptz;  -- latest best-run completion seen
 
 INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio'), ('blizzard_api') ON CONFLICT DO NOTHING;

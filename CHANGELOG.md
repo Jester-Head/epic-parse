@@ -6,6 +6,18 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Milestone dates and best-run dates, to recover part of a character's history from before it was
+  tracked (`python -m epic_parse milestones` backfills from stored responses):
+  - `milestone_achievements`: Blizzard's season keystone achievements (Explorer, Conqueror, Master, Hero,
+    Legend, Myth; BfA through Midnight, plus Legion's expansion-wide ones) mapped to Raider.IO seasons.
+  - `character_milestones`: when each character's account earned each one, filled on every Blizzard
+    lookup. Achievements are account-wide, so the date may come from another character; about 0.7% are
+    dated after their season ended (account-wide copies).
+  - `character_best_runs`: each dungeon's best run with its completion date, now requested on every
+    Raider.IO lookup and snapshot. Every best ever seen is kept, so weekly snapshots record upgrades;
+    runs that were later beaten before tracking started can't be recovered.
+  - `player_seasons.milestone_dates` (earliest date per milestone across the person's characters) and
+    `last_best_run_at`.
 - Type checking: `pyright` (dev dependency) configured for the project venv; the code passes with
   no errors. `db.scalar()` returns a single value and fails clearly when a query returns no row.
 - One row per person (`python -m epic_parse people`, also rebuilt by every weekly snapshot):
@@ -35,6 +47,8 @@ versions follow [Semantic Versioning](https://semver.org/).
   profiles --retry-failed` includes them again; any real answer resets the count.
 
 ### Fixed
+- Rebuilding `people` computes each person-season's percentile once (`mplus_tier_for_pct`), about
+  twice as fast; milestone and best-run columns are aggregated in one pass instead of per row.
 - One failing character, account, thread or thread-list page no longer stops a whole run: the weekly
   snapshot, the forum profiles fetch and the forum crawl now log it and move on (the lookups already did).
 - The weekly snapshot stops cleanly if Raider.IO lists no running season.

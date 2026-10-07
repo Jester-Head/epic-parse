@@ -27,6 +27,7 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
+from epic_parse import milestones
 from epic_parse.db import connect, source_id
 from epic_parse.fetch import Fetcher
 from epic_parse.sources.raiderio import NOT_UNKNOWN_REALM, SINCE, load_candidates
@@ -86,7 +87,8 @@ def _get(fetcher: Fetcher, token: Token, path: str, kind: str, transform=None) -
     return raw_id, data, fetcher.last_status
 
 
-def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name: str) -> bool:
+def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name: str,
+            milestone_ids: set[int] | None = None) -> bool:
     base = f"/profile/wow/character/{quote(realm)}/{quote(name.lower())}"
     raw_id, summary, status = _get(fetcher, token, base, "bnet_summary")
     conn.execute("UPDATE characters SET bnet_failures = 0 WHERE id = %s", (char_id,))  # got a real answer
@@ -109,6 +111,8 @@ def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name
                 "season": (b.get("season") or {}).get("id"),
             }
     _, ach, _ = _get(fetcher, token, base + "/achievements", "bnet_achievements", transform=_compact_achievements)
+    if ach and milestone_ids:
+        milestones.milestones_from_achievements(conn, char_id, ach.get("completed", []), milestone_ids)
     counts = {}
     for what in ("mounts", "pets", "toys"):
         _, c, _ = _get(fetcher, token, f"{base}/collections/{what}", f"bnet_{what}", transform=_count(what))
@@ -168,6 +172,9 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
     ).fetchall()
     log.info("%d characters to look up on the Blizzard API with %d worker(s)", len(todo), workers)
     token = Token()
+    if not milestones.milestone_ids(conn):
+        milestones.refresh_achievement_map(conn, token)
+    milestone_ids = milestones.milestone_ids(conn)
     progress = {"done": 0, "found": 0, "errors": 0}
     lock = threading.Lock()
 
@@ -178,7 +185,7 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                 for char_id, realm, name in chunk:
                     failed = False
                     try:
-                        ok = _lookup(wconn, wfetcher, token, char_id, realm, name)
+                        ok = _lookup(wconn, wfetcher, token, char_id, realm, name, milestone_ids)
                     except Exception as e:  # one bad character shouldn't stop the run
                         log.warning("Blizzard lookup failed for %s-%s, skipped from now on (--retry-failed): %s",
                                     name, realm, e)
