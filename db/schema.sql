@@ -291,7 +291,8 @@ ON CONFLICT (season) DO NOTHING;   -- never overwrite rows edited by hand
 -- told us their characters.
 CREATE TABLE IF NOT EXISTS players (
     id         bigserial PRIMARY KEY,
-    key        text NOT NULL UNIQUE,      -- 'forum:<account username>' or 'gold:<label>'
+    key        text NOT NULL UNIQUE,      -- 'forum:<account username>', 'self:<label>' (told us their
+                                          -- characters, e.g. survey) or 'gold:<label>' (human-verified)
     notes      text,
     created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -311,7 +312,8 @@ CREATE TABLE IF NOT EXISTS gold_labels (
     season     text,
     trait      text NOT NULL,             -- trait_schema name, e.g. 'commitment_tier', 'social_mode'
     value      text NOT NULL,
-    confidence text NOT NULL DEFAULT 'confirmed',   -- 'confirmed', 'boundary', 'needs_review'
+    confidence text NOT NULL DEFAULT 'confirmed',   -- 'confirmed', 'boundary', 'needs_review', or
+                                                    -- 'self_reported' (the player's own answer, not verified)
     note       text,
     labeled_by text NOT NULL,
     labeled_at timestamptz NOT NULL DEFAULT now()

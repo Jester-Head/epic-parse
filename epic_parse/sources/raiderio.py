@@ -291,7 +291,8 @@ def current_season(conn) -> str | None:
 def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
     """Record this week's score and item level for every tracked character.
 
-    Tracked = linked to a gold-labelled player, posted in a retail forum this season, or
+    Tracked = self-reported by a player (e.g. survey respondents) or linked to a gold-labelled
+    player, posted in a retail forum this season, or
     had a score this season at its last lookup. History is appended, never overwritten.
     """
     src = source_id(conn, SOURCE)
@@ -307,16 +308,16 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                    FROM posts
                    WHERE extra->>'game_version' = 'retail' AND extra ? 'realm'
                      AND created_at >= (SELECT starts FROM mplus_seasons WHERE slug = %(season)s)
-               ), gold AS (
+               ), named AS (  -- characters people told us about, or that belong to gold-labelled players
                    SELECT pc.character_id FROM player_characters pc JOIN players pl ON pl.id = pc.player_id
-                   WHERE pl.key LIKE 'gold:%%'
+                   WHERE pc.how = 'self_reported' OR pl.key LIKE 'gold:%%'
                )
                SELECT ch.id, ch.realm, ch.name FROM characters ch
                LEFT JOIN season_posters sp ON sp.realm = ch.realm AND sp.lname = lower(ch.name)
                WHERE ch.region = %(region)s AND ch.found IS DISTINCT FROM false AND {NOT_UNKNOWN_REALM}
                  AND NOT EXISTS (SELECT 1 FROM character_snapshots s
                                  WHERE s.character_id = ch.id AND s.taken_at > now() - interval '5 days')
-                 AND (ch.id IN (SELECT character_id FROM gold)
+                 AND (ch.id IN (SELECT character_id FROM named)
                       OR coalesce((ch.mplus->>%(season)s)::numeric, 0) > 0
                       OR sp.realm IS NOT NULL)
                ORDER BY ch.id LIMIT %(limit)s""",
