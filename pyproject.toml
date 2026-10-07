@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 analysis = ["matplotlib>=3.8"]
+dev = ["pyright"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -20,3 +21,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["epic_parse*"]
+
+[tool.pyright]
+# Check against the project venv (same libraries as at runtime); run with: pyright epic_parse
+venvPath = "."
+venv = ".venv"
+include = ["epic_parse"]

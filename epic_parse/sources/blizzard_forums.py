@@ -132,8 +132,8 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
                         return
                     requests = _fetch_topic(conn, fetcher, src, t["id"])
                     fetched += 1
-                    log.info("[%s p%d] topic %d %r (%d requests)", slug, page, t["id"], t.get("title", "")[:60], requests)
-                if not data["topic_list"].get("more_topics_url"):
+                    log.info("[%s p%d] topic %d %r (%d requests)", slug, page, t["id"], (t.get("title") or "")[:60], requests)
+                if not (data or {}).get("topic_list", {}).get("more_topics_url"):
                     break
                 page += 1
         log.info("Done: %d topics fetched", fetched)
@@ -144,12 +144,12 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
 # --------------------------------------------------------------------------- parse
 
 
-def clean_text(text: str) -> str:
+def clean_text(text: str | None) -> str:
     """Fix mis-decoded characters (e.g. 'canâ€™t' -> 'can't') and collapse whitespace."""
     return re.sub(r"\s+", " ", ftfy.fix_text(text or "")).strip()
 
 
-def split_quotes(html: str) -> tuple[str, list[dict]]:
+def split_quotes(html: str | None) -> tuple[str, list[dict]]:
     """Separate a post's own text from the posts it quotes.
 
     Returns (body_text, [{"user", "post_number", "text"}, ...]).

@@ -15,6 +15,9 @@
 """
 import argparse
 import logging
+from typing import LiteralString
+
+from psycopg import sql as pgsql
 
 from epic_parse import db, people, projection, wow_patches
 from epic_parse.importers import v1_archive
@@ -99,23 +102,24 @@ def main() -> None:
                     print(f"  top {100 - float(pct):<5g}{week:>5}{n:>9}{med:>11}%{worst:>10}%{inside:>9}%")
         elif args.command == "people":
             people.refresh(conn)
-            for label, sql in [
+            summaries: list[tuple[str, LiteralString]] = [
                 ("people", "SELECT count(*), count(*) FILTER (WHERE characters > 0), count(*) FILTER (WHERE raiderio_found > 0) FROM people"),
                 ("peak Mythic+ tier", "SELECT coalesce(peak_tier, 'unknown'), count(*) FROM people GROUP BY 1 ORDER BY 2 DESC"),
                 ("current season tier (provisional)", "SELECT coalesce(current_tier, '(no score)'), count(*) FROM people GROUP BY 1 ORDER BY 2 DESC"),
-            ]:
-                print(f"{label}: {conn.execute(sql).fetchall()}")
+            ]
+            for label, query in summaries:
+                print(f"{label}: {conn.execute(query).fetchall()}")
         elif args.command == "stats":
             for table in ("raw_pages", "threads", "posts"):
-                count = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+                count = db.scalar(conn, pgsql.SQL("SELECT count(*) FROM {}").format(pgsql.Identifier(table)))
                 print(f"{table:<10} {count:>10,}")
             for name, threads, posts in conn.execute(
                 "SELECT s.name, (SELECT count(*) FROM threads t WHERE t.source_id = s.id), "
                 "(SELECT count(*) FROM posts p WHERE p.source_id = s.id) FROM sources s ORDER BY s.name"
             ):
                 print(f"  {name:<16} {threads:>9,} threads {posts:>11,} posts")
-            unparsed = conn.execute("SELECT count(*) FROM raw_pages WHERE parsed_at IS NULL "
-                                    "AND kind IN ('topic', 'posts') AND status = 200").fetchone()[0]
+            unparsed = db.scalar(conn, "SELECT count(*) FROM raw_pages WHERE parsed_at IS NULL "
+                                       "AND kind IN ('topic', 'posts') AND status = 200")
             print(f"unparsed   {unparsed:>10,}")
 
 

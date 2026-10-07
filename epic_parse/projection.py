@@ -86,7 +86,7 @@ def backtest(conn, weeks=(2, 4, 6, 8, 10, 12, 16)) -> list[tuple]:
     return rows
 
 
-def report(conn, season: str | None = None) -> list[tuple]:
+def report(conn, season: str | None = None) -> tuple[str, list[tuple]]:
     season = season or conn.execute(
         "SELECT slug FROM mplus_seasons WHERE starts <= now() ORDER BY starts DESC LIMIT 1").fetchone()[0]
     return season, conn.execute(

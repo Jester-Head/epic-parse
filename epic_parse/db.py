@@ -8,10 +8,12 @@ import logging
 import os
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, LiteralString, cast
 
 import psycopg
 from dotenv import load_dotenv
 from psycopg import sql
+from psycopg.abc import Params, QueryNoTemplate
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_FILE = PROJECT_ROOT / "db" / "schema.sql"
@@ -23,7 +25,7 @@ log = logging.getLogger(__name__)
 # The GIN search indexes on posts (same definitions as db/schema.sql). Updating them row
 # by row during a multi-million-row insert/update is extremely slow, so bulk operations
 # drop them and rebuild them once at the end.
-SEARCH_INDEXES = {
+SEARCH_INDEXES: dict[str, LiteralString] = {
     "posts_body_search": "CREATE INDEX posts_body_search ON posts USING gin (body_tsv)",
     "posts_extra": "CREATE INDEX posts_extra ON posts USING gin (extra jsonb_path_ops)",
 }
@@ -53,16 +55,25 @@ def init_db() -> None:
             conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
             print(f"Created database {name!r}")
     with connect() as conn:
-        conn.execute(SCHEMA_FILE.read_text(encoding="utf-8"))
+        # Our own schema file, so it's safe to run as-is (psycopg wants literal SQL by default).
+        conn.execute(cast(LiteralString, SCHEMA_FILE.read_text(encoding="utf-8")))
     print(f"Schema applied to {name!r}")
 
 
+def scalar(conn: psycopg.Connection, query: QueryNoTemplate, params: Params | None = None) -> Any:
+    """First column of the first row, for queries that always return a row (counts, RETURNING)."""
+    row = conn.execute(query, params).fetchone()
+    if row is None:
+        raise LookupError(f"Query returned no rows: {query!r}")
+    return row[0]
+
+
 def source_id(conn: psycopg.Connection, name: str) -> int:
-    row = conn.execute(
+    return scalar(
+        conn,
         "INSERT INTO sources (name) VALUES (%s) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id",
         (name,),
-    ).fetchone()
-    return row[0]
+    )
 
 
 @contextmanager
@@ -78,7 +89,7 @@ def bulk_mode(conn: psycopg.Connection, enabled: bool = True):
     conn.execute("SET LOCAL work_mem = '256MB'")
     conn.execute("SET LOCAL maintenance_work_mem = '1GB'")
     for name in SEARCH_INDEXES:
-        conn.execute(f"DROP INDEX IF EXISTS {name}")
+        conn.execute(sql.SQL("DROP INDEX IF EXISTS {}").format(sql.Identifier(name)))
     yield
     log.info("  rebuilding search indexes...")
     for create in SEARCH_INDEXES.values():

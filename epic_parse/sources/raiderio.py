@@ -82,7 +82,7 @@ def _fetch_seasons(conn, fetcher: Fetcher) -> list[str]:
     ).fetchall():
         raw_id, data = fetcher.get_json(f"{BASE}/mythic-plus/season-cutoffs", "cutoffs",
                                         params=_params(region=REGION, season=slug[0]))
-        status = conn.execute("SELECT status FROM raw_pages WHERE id = %s", (raw_id,)).fetchone()[0]
+        status = fetcher.last_status
         if status == 404:
             conn.execute("UPDATE mplus_seasons SET has_cutoffs = false WHERE slug = %s", (slug[0],))
             continue
@@ -157,7 +157,7 @@ def _record_not_found(conn, char_id: int, raw_id: int) -> None:
                  "WHERE id = %s AND found IS NOT TRUE", (raw_id, char_id))
 
 
-def _apply_profile(conn, char_id: int, raw_id: int, status: int, body: dict | None) -> bool:
+def _apply_profile(conn, char_id: int, raw_id: int, status: int | None, body: dict | None) -> bool:
     """Write one raw profile response onto its characters row. Returns found."""
     if status != 200 or not body:
         _record_not_found(conn, char_id, raw_id)
@@ -222,7 +222,7 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                         raw_id, body = wfetcher.get_json(
                             f"{BASE}/characters/profile", "character",
                             params=_params(region=REGION, realm=realm, name=name, fields=fields))
-                        status = wconn.execute("SELECT status FROM raw_pages WHERE id = %s", (raw_id,)).fetchone()[0]
+                        status = wfetcher.last_status
                         ok = _apply_profile(wconn, char_id, raw_id, status, body)
                     except Exception as e:  # one bad character shouldn't stop the run; it's retried next run
                         log.warning("Lookup failed for %s-%s: %s", name, realm, e)
@@ -327,15 +327,18 @@ def current_season(conn) -> str | None:
 def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
     """Record this week's score and item level for every tracked character.
 
-    Tracked = self-reported by a player (e.g. survey respondents) or linked to a gold-labelled
-    player, posted in a retail forum this season, or
-    had a score this season at its last lookup. History is appended, never overwritten.
+    Tracked = characters that are self-reported (e.g. survey respondents) or belong to a gold-labelled
+    player, that posted in a retail forum this season, or that had a score this season at their last
+    lookup. History is appended, never overwritten.
     """
     src = source_id(conn, SOURCE)
     fetcher = Fetcher(conn, src, delay=delay)
     try:
         _fetch_seasons(conn, fetcher)  # also refreshes the current season's cutoffs and history
         season = current_season(conn)
+        if season is None:
+            log.warning("No active M+ season found; skipping snapshot")
+            return
         link_forum_players(conn)
         targets = conn.execute(
             f"""WITH season_posters AS (  -- distinct characters that posted this season (one pass over posts)
