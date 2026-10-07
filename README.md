@@ -66,6 +66,23 @@ For forum posters' retail characters: PvP ratings, achievements with dates, coll
 statistics, raid kills, item level and last login (`bnet_characters`; details in raw `bnet_*` pages).
 Characters that haven't logged in for a long time return "not found" from Blizzard.
 
+## Mythic+ cutoff projections
+
+```bash
+python -m epic_parse projection --backtest
+```
+
+Projects where each percentile line (top 0.1/1/5/10/25/40%) will end the season, from how far
+along the same line was on the same day in finished seasons, with a low-high range and a backtest
+of past accuracy. The `snapshot_pace` view puts each weekly character snapshot next to its same-day
+percentile and the projected final lines.
+
+```sql
+-- where would this score land if the season ended at the projected lines?
+SELECT * FROM mplus_cutoff_projection('season-mn-2', 99);
+SELECT name, realm, taken_at, score, pct_same_day, proj_top_1, proj_top_5 FROM snapshot_pace;
+```
+
 ## Patch tagging
 
 Every forum post gets `game_version` (retail / classic / forever), `expansion` and, for retail,
@@ -134,6 +151,7 @@ epic_parse/sources/blizzard_forums.py fetch + parse for the Blizzard forums
 epic_parse/sources/forum_profiles.py  forum account profiles: alts, account stats, About me
 epic_parse/sources/raiderio.py        Raider.IO seasons, cutoffs, character lookups, weekly snapshots
 epic_parse/wow_patches.py             patch dates and game version / expansion / patch tagging
+epic_parse/projection.py              end-of-season Mythic+ cutoff projections and backtest
 epic_parse/importers/v1_archive.py    one-off importers for v1 data files
 scripts/backup.ps1                    database backup (run weekly by Task Scheduler)
 ```

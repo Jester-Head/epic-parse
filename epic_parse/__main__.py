@@ -9,12 +9,13 @@
   parse blizzard|raiderio         turn raw pages into rows
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
   tag-patches [--overwrite]       tag forum posts with game version / expansion / patch
+  projection [--season S] [--backtest]  projected end-of-season Mythic+ cutoffs
   stats                           row counts per table
 """
 import argparse
 import logging
 
-from epic_parse import db, wow_patches
+from epic_parse import db, projection, wow_patches
 from epic_parse.importers import v1_archive
 from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio
 
@@ -52,6 +53,10 @@ def main() -> None:
     p_snap = sub.add_parser("snapshot", help="weekly Raider.IO snapshot (score, item level) of tracked characters")
     p_snap.add_argument("--limit", type=int, help="max characters this run")
 
+    p_proj = sub.add_parser("projection", help="projected end-of-season Mythic+ cutoff lines")
+    p_proj.add_argument("--season", help="Raider.IO season slug (default: the current one)")
+    p_proj.add_argument("--backtest", action="store_true", help="also show how accurate past projections were")
+
     sub.add_parser("stats", help="show row counts")
 
     args = parser.parse_args()
@@ -76,6 +81,19 @@ def main() -> None:
             raiderio.snapshot(conn, limit=args.limit)
         elif args.command == "tag-patches":
             wow_patches.tag_posts(conn, overwrite=args.overwrite)
+        elif args.command == "projection":
+            projection.refresh(conn)
+            season, rows = projection.report(conn, args.season)
+            print(f"Projected end of {season} (US), from finished seasons at the same day:")
+            print(f"  {'line':<9}{'day':>4}{'today':>9}{'projected':>11}{'low':>9}{'high':>9}{'seasons':>9}")
+            for pct, day, cur, proj, low, high, n in rows:
+                print(f"  top {100 - float(pct):<5g}{day:>4}{cur or 0:>9.0f}{proj or 0:>11.0f}{low or 0:>9.0f}{high or 0:>9.0f}{n:>9}")
+            if args.backtest:
+                print()
+                print("Backtest (each finished season projected from the others):")
+                print(f"  {'line':<9}{'week':>5}{'seasons':>9}{'median err':>12}{'worst err':>11}{'in range':>10}")
+                for pct, week, n, med, worst, inside in projection.backtest(conn):
+                    print(f"  top {100 - float(pct):<5g}{week:>5}{n:>9}{med:>11}%{worst:>10}%{inside:>9}%")
         elif args.command == "stats":
             for table in ("raw_pages", "threads", "posts"):
                 count = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]

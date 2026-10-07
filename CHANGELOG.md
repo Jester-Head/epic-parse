@@ -6,6 +6,15 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- End-of-season projections of the Mythic+ percentile lines (`python -m epic_parse projection
+  [--backtest]`, SQL `mplus_cutoff_projection(season, percentile, date)`): today's value divided by
+  the median share other finished seasons had reached by the same day, with a low-high range.
+  Backtested leave-one-out: top-1% line typically within ~2% at weeks 2-6 and under 1% from week 10.
+  DF Season 1 is left out of the model (thin Raider.IO archive). Raider.IO's site projection isn't
+  in its public API.
+- `snapshot_pace` view: each weekly snapshot with its same-day percentile and the projected final
+  0.1/1/5/10% lines as seen that week, to compare where someone stood before they stopped playing
+  with where the season was heading.
 - Blizzard Profile API source (`fetch bnet`): for forum posters' retail characters, PvP ratings per
   bracket, honor level, achievement points and the date each achievement was earned, mount/pet/toy
   counts, lifetime statistics, raid kills with dates, item level and last login (`bnet_characters`,
@@ -37,6 +46,7 @@ versions follow [Semantic Versioning](https://semver.org/).
   every self-reported character (e.g. survey respondents), not just gold-labelled players.
 
 ### Fixed
+- Raider.IO's empty season-start points (score 0) are no longer stored in the cutoff history.
 - A successful Raider.IO snapshot now marks the character as found and fills in class, spec, race,
   faction and the current-season score (1,181 characters were stuck as "not looked up").
 - Seasons Raider.IO has no cutoffs for (BfA S1–4, Shadowlands S1–2) are no longer requested on

@@ -236,6 +236,41 @@ RETURNS numeric LANGUAGE sql STABLE AS $$
     END, 2)
 $$;
 
+-- Projection model: how far along each percentile line was on each day of a finished season,
+-- as a share of its final value (share = value / final). Built by epic_parse.projection.refresh()
+-- from the cutoff history; the 95 (top 5%) line is interpolated with mplus_score_at.
+CREATE TABLE IF NOT EXISTS mplus_line_progress (
+    season     text,
+    percentile numeric,
+    day        int,                       -- days since the season started (US)
+    value      numeric,
+    final      numeric,
+    share      numeric,
+    PRIMARY KEY (season, percentile, day)
+);
+
+-- Projected end-of-season value of a percentile line (99.9, 99, 95, 90, 75, 60), as seen on p_at:
+-- the line's value that day divided by the median share other finished seasons had reached by
+-- the same day. low/high use the extreme shares. NULL projection with fewer than 3 seasons.
+-- The season itself is never part of its own model, so past seasons can be backtested.
+CREATE OR REPLACE FUNCTION mplus_cutoff_projection(p_season text, p_percentile numeric, p_at timestamptz DEFAULT now())
+RETURNS TABLE (day int, current_score numeric, projected numeric, low numeric, high numeric, seasons_used int)
+LANGUAGE sql STABLE AS $$
+    WITH d AS (SELECT (p_at::date - starts) AS day FROM mplus_seasons WHERE slug = p_season),
+    cur AS (SELECT mplus_score_at(p_season, 100 - p_percentile, p_at) AS v),
+    r AS (
+        SELECT lp.share FROM mplus_line_progress lp, d
+        WHERE lp.percentile = p_percentile AND lp.day = d.day AND lp.season <> p_season AND lp.share > 0
+    )
+    SELECT d.day, cur.v,
+           CASE WHEN count(r.share) >= 3 THEN round(cur.v / (percentile_cont(0.5) WITHIN GROUP (ORDER BY r.share))::numeric, 1) END,
+           CASE WHEN count(r.share) >= 3 THEN round(cur.v / max(r.share), 1) END,
+           CASE WHEN count(r.share) >= 3 THEN round(cur.v / min(r.share), 1) END,
+           count(r.share)::int
+    FROM d CROSS JOIN cur LEFT JOIN r ON true
+    GROUP BY d.day, cur.v
+$$;
+
 -- Raider.IO publishes 99.9/99/90/75/60 lines only. Extra lines (e.g. top 5%, a Blizzard
 -- reward tier from Midnight Season 3) are interpolated with mplus_score_at and marked derived.
 ALTER TABLE mplus_cutoffs ADD COLUMN IF NOT EXISTS derived boolean NOT NULL DEFAULT false;
@@ -372,5 +407,19 @@ CREATE TABLE IF NOT EXISTS bnet_characters (
     fetched_at             timestamptz,
     raw_page_id            bigint             -- the summary response
 );
+
+-- Each weekly snapshot next to where the season stood and where it was heading that week:
+-- same-day percentile, and the projected end-of-season 0.1/1/5/10% lines as seen on that date.
+-- For someone who stopped playing, compare their last score with these to see how they'd have
+-- ranked had the season ended then vs where it was going.
+CREATE OR REPLACE VIEW snapshot_pace AS
+SELECT s.character_id, ch.name, ch.realm, s.season, s.taken_at, s.score, s.item_level,
+       mplus_percentile(s.season, s.score, s.taken_at)            AS pct_same_day,
+       (SELECT projected FROM mplus_cutoff_projection(s.season, 99.9, s.taken_at)) AS proj_top_0_1,
+       (SELECT projected FROM mplus_cutoff_projection(s.season, 99,   s.taken_at)) AS proj_top_1,
+       (SELECT projected FROM mplus_cutoff_projection(s.season, 95,   s.taken_at)) AS proj_top_5,
+       (SELECT projected FROM mplus_cutoff_projection(s.season, 90,   s.taken_at)) AS proj_top_10
+FROM character_snapshots s JOIN characters ch ON ch.id = s.character_id
+WHERE s.score > 0;
 
 INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio'), ('blizzard_api') ON CONFLICT DO NOTHING;
