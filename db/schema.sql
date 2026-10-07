@@ -268,6 +268,11 @@ CREATE TABLE IF NOT EXISTS season_rules (
     sources         text
 );
 INSERT INTO season_rules (season, rating_system, affix_split, ksm_requirement, key_squish, sources) VALUES
+    -- Legion: Raider.IO score only; KSM rules not verified yet (NULL)
+    ('season-7.2.0', 'raiderio_score_only', NULL, NULL, NULL, 'Raider.IO static-data (expansion 6)'),
+    ('season-7.2.5', 'raiderio_score_only', NULL, NULL, NULL, 'Raider.IO static-data (expansion 6)'),
+    ('season-7.3.0', 'raiderio_score_only', NULL, NULL, NULL, 'Raider.IO static-data (expansion 6)'),
+    ('season-7.3.2', 'raiderio_score_only', NULL, NULL, NULL, 'Raider.IO static-data (expansion 6)'),
     ('season-bfa-1', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating (replaced +5/+10/+15 achievements in 9.1.0)'),
     ('season-bfa-2', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
     ('season-bfa-3', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
