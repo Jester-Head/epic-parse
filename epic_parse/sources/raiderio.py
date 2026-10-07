@@ -17,7 +17,7 @@ import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from epic_parse import projection
+from epic_parse import people, projection
 from epic_parse.db import connect, source_id
 from epic_parse.fetch import Fetcher
 
@@ -385,3 +385,4 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
         log.info("Done: %d snapshots taken", taken)
     finally:
         fetcher.close()
+    people.refresh(conn)  # keep the one-row-per-person tables current every week
