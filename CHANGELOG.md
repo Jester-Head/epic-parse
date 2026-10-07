@@ -14,8 +14,14 @@ versions follow [Semantic Versioning](https://semver.org/).
     the person's characters.
   - `player_seasons`: one row per person per Mythic+ season with their best retail character,
     score, percentile, tier, elite flag (top 0.1%) and how many of their characters had a score.
-  - `mplus_tier(season, score)`: hardcore = top 1%, mid2 = top 5%, mid1 = Keystone Legend (top 20%
-    in seasons without it), casual = any lower score; NULL for seasons without percentile data.
+  - `mplus_tier(season, score)`: fixed percentile bands so a tier is the same share of players every
+    season: hardcore = top 1%, mid2 = top 5%, mid1 = top 20%, casual = any lower score; NULL for
+    seasons without percentile data. (An earlier draft tied mid1 to Keystone Legend, but Legend
+    ranged from about the top 15% to the top 29% between seasons.)
+  - `mplus_milestones(season, score)`: keystone achievements a score qualifies for (Explorer through
+    Myth) with each season's own thresholds, stored separately from the tier
+    (`player_seasons.milestones` / `milestone`, `people.best_milestone`, `current_milestone`), so
+    questions like "do people stop after Legend?" aren't built into the tier definition.
 - Index on `player_characters (character_id)`.
 
 ## [0.4.0] - 2026-10-06

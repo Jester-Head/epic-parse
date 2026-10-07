@@ -423,10 +423,12 @@ SELECT s.character_id, ch.name, ch.realm, s.season, s.taken_at, s.score, s.item_
        (SELECT projected FROM mplus_cutoff_projection(s.season, 90,   s.taken_at)) AS proj_top_10
 FROM character_snapshots s JOIN characters ch ON ch.id = s.character_id;
 
--- Mythic+ commitment tier for a season score:
---   hardcore = top 1% (elite = top 0.1%, flagged separately), mid2 = top 5%,
---   mid1 = Keystone Legend (seasons without it on Raider.IO: top 20%), casual = any lower score,
---   none = no score. NULL when the season has no percentile data (Legion, BfA, Shadowlands S1-2).
+-- Mythic+ commitment tier for a season score, by fixed percentile bands so a tier means the same
+-- share of players every season: hardcore = top 1% (elite = top 0.1%, flagged separately),
+-- mid2 = top 5%, mid1 = top 20%, casual = any lower score, none = no score. NULL when the season
+-- has no percentile data (Legion, BfA, Shadowlands S1-2). Milestones like Keystone Legend are kept
+-- separately (mplus_milestones): their difficulty varied between seasons (Legend was ~top 15% to
+-- ~top 29%), and keeping them out of the tier lets "do people stop after Legend?" be asked directly.
 CREATE OR REPLACE FUNCTION mplus_tier(p_season text, p_score numeric) RETURNS text
 LANGUAGE sql STABLE AS $$
     SELECT CASE
@@ -434,12 +436,23 @@ LANGUAGE sql STABLE AS $$
         WHEN x.pct IS NULL THEN NULL
         WHEN x.pct <= 1 THEN 'hardcore'
         WHEN x.pct <= 5 THEN 'mid2'
-        WHEN (x.ksl IS NOT NULL AND p_score >= x.ksl) OR (x.ksl IS NULL AND x.pct <= 20) THEN 'mid1'
+        WHEN x.pct <= 20 THEN 'mid1'
         ELSE 'casual'
     END
-    FROM (SELECT mplus_percentile(p_season, p_score) AS pct,
-                 (SELECT min_score FROM mplus_percentile_points
-                  WHERE season = p_season AND point = 'keystoneLegend') AS ksl) x
+    FROM (SELECT mplus_percentile(p_season, p_score) AS pct) x
+$$;
+
+-- Keystone achievements a season score qualifies for (Explorer, Conqueror, Master, Hero, Legend,
+-- Myth), using Raider.IO's thresholds for that season, lowest first. Empty array = none reached;
+-- NULL = no threshold data for the season (before Shadowlands S3).
+CREATE OR REPLACE FUNCTION mplus_milestones(p_season text, p_score numeric) RETURNS text[]
+LANGUAGE sql STABLE AS $$
+    SELECT CASE
+        WHEN NOT EXISTS (SELECT 1 FROM mplus_percentile_points WHERE season = p_season AND point LIKE 'keystone%') THEN NULL
+        ELSE coalesce((SELECT array_agg(replace(point, 'keystone', 'Keystone ') ORDER BY min_score)
+                       FROM mplus_percentile_points
+                       WHERE season = p_season AND point LIKE 'keystone%' AND p_score >= min_score), '{}')
+    END
 $$;
 
 -- One row per person per Mythic+ season they have a score in (rebuilt by epic_parse.people.refresh).
@@ -459,6 +472,8 @@ CREATE TABLE IF NOT EXISTS player_seasons (
     provisional           boolean,              -- season still running
     PRIMARY KEY (player_id, season)
 );
+ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS milestones text[];   -- mplus_milestones(): all reached
+ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS milestone text;      -- the highest one reached
 
 -- One row per person: a forum account (or self-reported player) with everything known about
 -- them across their characters and sources (rebuilt by epic_parse.people.refresh).
@@ -504,5 +519,8 @@ CREATE TABLE IF NOT EXISTS people (
     last_login          timestamptz,
     refreshed_at        timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE people ADD COLUMN IF NOT EXISTS best_milestone text;          -- highest keystone achievement any season
+ALTER TABLE people ADD COLUMN IF NOT EXISTS best_milestone_season text;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS current_milestone text;
 
 INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio'), ('blizzard_api') ON CONFLICT DO NOTHING;
