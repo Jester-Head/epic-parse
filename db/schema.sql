@@ -411,7 +411,8 @@ CREATE TABLE IF NOT EXISTS bnet_characters (
 -- Each weekly snapshot next to where the season stood and where it was heading that week:
 -- same-day percentile, and the projected end-of-season 0.1/1/5/10% lines as seen on that date.
 -- For someone who stopped playing, compare their last score with these to see how they'd have
--- ranked had the season ended then vs where it was going.
+-- ranked had the season ended then vs where it was going. Snapshots with a score of 0 (no Mythic+
+-- this season yet, or at all) are included; their pct_same_day is NULL.
 CREATE OR REPLACE VIEW snapshot_pace AS
 SELECT s.character_id, ch.name, ch.realm, s.season, s.taken_at, s.score, s.item_level,
        mplus_percentile(s.season, s.score, s.taken_at)            AS pct_same_day,
@@ -419,7 +420,6 @@ SELECT s.character_id, ch.name, ch.realm, s.season, s.taken_at, s.score, s.item_
        (SELECT projected FROM mplus_cutoff_projection(s.season, 99,   s.taken_at)) AS proj_top_1,
        (SELECT projected FROM mplus_cutoff_projection(s.season, 95,   s.taken_at)) AS proj_top_5,
        (SELECT projected FROM mplus_cutoff_projection(s.season, 90,   s.taken_at)) AS proj_top_10
-FROM character_snapshots s JOIN characters ch ON ch.id = s.character_id
-WHERE s.score > 0;
+FROM character_snapshots s JOIN characters ch ON ch.id = s.character_id;
 
 INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio'), ('blizzard_api') ON CONFLICT DO NOTHING;
