@@ -26,6 +26,9 @@ versions follow [Semantic Versioning](https://semver.org/).
     questions like "do people stop after Legend?" aren't built into the tier definition.
 - Index on `player_characters (character_id)`.
 
+### Removed
+- An analysis script that didn't belong in this project, and its optional `matplotlib` dependency.
+
 ### Changed
 - Lookups that still fail after all retries are skipped by later runs instead of retried every time
   (`characters.raiderio_failures` / `bnet_failures`, `forum_accounts.failures`). `fetch raiderio | bnet |
@@ -102,9 +105,6 @@ Player data: who the forum posters are in the game, and how their Mythic+ season
   (achievements are ~2 MB per character; ~23 KB after).
 
 **Analysis and research**
-- `analysis/stopping_early.py`: charts (PNG + CSV) for the planned blog post "Why stopping early
-  costs you rank", from aggregate Raider.IO cutoff data. Needs `pip install -e .[analysis]`
-  (matplotlib).
 - Pilot survey (`docs/survey/`, **on hold**, not sent out): questions, consent text, codebook and a
   Google Apps Script that builds the form. Revised for neutral wording (no assumption that everyone pushes keys), standard
   survey structure, per-patch play-amount grids, separate unrated and rated PvP, and first-person
@@ -116,7 +116,6 @@ Player data: who the forum posters are in the game, and how their Mythic+ season
 - The owner's characters and labels are ordinary self-reported data (`players.key = 'self:owner'`,
   `gold_labels.confidence = 'self_reported'`), not a gold standard. Weekly snapshots track every
   self-reported character (e.g. survey respondents).
-- Blog drafts (`docs/blog/`) are kept in their own local repository and ignored here.
 
 ### Fixed
 - A successful Raider.IO snapshot marks the character as found and fills in class, spec, race,
