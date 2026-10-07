@@ -41,6 +41,8 @@ def main() -> None:
     p_fetch.add_argument("--max-topics", type=int, help="stop after this many new/changed topics")
     p_fetch.add_argument("--limit", type=int, help="raiderio / profiles: max lookups this run")
     p_fetch.add_argument("--workers", type=int, help="raiderio / bnet: lookups to run in parallel (default 1 raiderio, 4 bnet)")
+    p_fetch.add_argument("--retry-failed", action="store_true", default=None,
+                         help="raiderio / bnet: also retry characters whose lookup failed after all retries before")
     p_fetch.add_argument("--delay", type=float, help="seconds between requests (default: 1.5 forums and profiles, 1.2 raiderio)")
 
     p_parse = sub.add_parser("parse", help="turn unparsed raw pages into threads/posts rows")
@@ -77,7 +79,7 @@ def main() -> None:
     with db.connect() as conn:
         if args.command == "fetch":
             options = {k: v for k, v in vars(args).items()
-                       if k in ("categories", "max_pages", "max_topics", "limit", "delay", "workers") and v is not None}
+                       if k in ("categories", "max_pages", "max_topics", "limit", "delay", "workers", "retry_failed") and v is not None}
             SOURCES[args.source].fetch(conn, **options)
         elif args.command == "parse":
             SOURCES[args.source].parse(conn)

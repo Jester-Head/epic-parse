@@ -26,7 +26,18 @@ versions follow [Semantic Versioning](https://semver.org/).
     questions like "do people stop after Legend?" aren't built into the tier definition.
 - Index on `player_characters (character_id)`.
 
+### Changed
+- Lookups that still fail after all retries are skipped by later runs instead of retried every time
+  (`characters.raiderio_failures` / `bnet_failures`, `forum_accounts.failures`). `fetch raiderio | bnet |
+  profiles --retry-failed` includes them again; any real answer resets the count.
+
 ### Fixed
+- One failing character, account, thread or thread-list page no longer stops a whole run: the weekly
+  snapshot, the forum profiles fetch and the forum crawl now log it and move on (the lookups already did).
+- The weekly snapshot stops cleanly if Raider.IO lists no running season.
+- Choosing characters to look up could run for hours: with a small `--limit` (or nothing left to do)
+  Postgres picked a plan that re-scanned every post. Forum-poster candidates are now collected once into a
+  temp table with statistics (`raiderio.load_candidates`).
 - Type-checker findings: fetch status is read from the fetcher instead of re-queried; table and index
   names in SQL go through `sql.Identifier`; a forum topic-list page that fails no longer crashes the crawl
   (`data` could be `None`); corrected return types.

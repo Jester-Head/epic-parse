@@ -29,7 +29,7 @@ import httpx
 
 from epic_parse.db import connect, source_id
 from epic_parse.fetch import Fetcher
-from epic_parse.sources.raiderio import CANDIDATES_SQL, NOT_UNKNOWN_REALM, SINCE
+from epic_parse.sources.raiderio import NOT_UNKNOWN_REALM, SINCE, load_candidates
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +89,7 @@ def _get(fetcher: Fetcher, token: Token, path: str, kind: str, transform=None) -
 def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name: str) -> bool:
     base = f"/profile/wow/character/{quote(realm)}/{quote(name.lower())}"
     raw_id, summary, status = _get(fetcher, token, base, "bnet_summary")
+    conn.execute("UPDATE characters SET bnet_failures = 0 WHERE id = %s", (char_id,))  # got a real answer
     if status != 200 or not summary:
         conn.execute(
             """INSERT INTO bnet_characters (character_id, found, fetched_at, raw_page_id) VALUES (%s, false, now(), %s)
@@ -144,22 +145,26 @@ def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name
     return True
 
 
-def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float = 0.5, workers: int = 4, **_) -> None:
+def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float = 0.5, workers: int = 4,
+          retry_failed: bool = False, **_) -> None:
     """Look up forum posters' characters on the Profile API, newest posters first.
 
     About 8 requests per character; 4 workers x 0.5 s keeps the rate near 8/s, under the
-    36,000/hour limit (10/s on average).
+    36,000/hour limit (10/s on average). Characters whose lookup failed after all retries are
+    skipped unless `retry_failed`.
     """
     src = source_id(conn, SOURCE)
+    load_candidates(conn)
     todo = conn.execute(
         f"""SELECT ch.id, ch.realm, ch.name
-            FROM characters ch JOIN ({CANDIDATES_SQL}) c ON c.realm = ch.realm AND lower(c.name) = lower(ch.name)
+            FROM characters ch JOIN candidates c ON c.realm = ch.realm AND lower(c.name) = lower(ch.name)
             LEFT JOIN bnet_characters b ON b.character_id = ch.id
             WHERE ch.region = %(region)s AND {NOT_UNKNOWN_REALM}
+              AND (%(retry)s OR ch.bnet_failures = 0)
               AND (b.fetched_at IS NULL OR b.fetched_at < now() - make_interval(days => %(days)s))
             ORDER BY c.last_post DESC
             LIMIT %(limit)s""",
-        {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit},
+        {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit, "retry": retry_failed},
     ).fetchall()
     log.info("%d characters to look up on the Blizzard API with %d worker(s)", len(todo), workers)
     token = Token()
@@ -174,8 +179,10 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                     failed = False
                     try:
                         ok = _lookup(wconn, wfetcher, token, char_id, realm, name)
-                    except Exception as e:  # skip; retried next run
-                        log.warning("Blizzard lookup failed for %s-%s: %s", name, realm, e)
+                    except Exception as e:  # one bad character shouldn't stop the run
+                        log.warning("Blizzard lookup failed for %s-%s, skipped from now on (--retry-failed): %s",
+                                    name, realm, e)
+                        wconn.execute("UPDATE characters SET bnet_failures = bnet_failures + 1 WHERE id = %s", (char_id,))
                         ok, failed = False, True
                     with lock:
                         progress["done"] += 1

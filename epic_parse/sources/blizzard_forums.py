@@ -120,7 +120,12 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
                 continue
             page = 0
             while max_pages is None or page < max_pages:
-                _, data = fetcher.get_json(f"{BASE}/c/{slug}/{by_slug[slug]}.json", "topic_list", params={"page": page})
+                try:
+                    _, data = fetcher.get_json(f"{BASE}/c/{slug}/{by_slug[slug]}.json", "topic_list",
+                                               params={"page": page})
+                except Exception as e:
+                    log.error("Thread list %s page %d failed, moving to the next category: %s", slug, page, e)
+                    break
                 topics = (data or {}).get("topic_list", {}).get("topics", [])
                 if not topics:
                     break
@@ -130,7 +135,11 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
                     if max_topics is not None and fetched >= max_topics:
                         log.info("Reached max_topics=%d", max_topics)
                         return
-                    requests = _fetch_topic(conn, fetcher, src, t["id"])
+                    try:
+                        requests = _fetch_topic(conn, fetcher, src, t["id"])
+                    except Exception as e:  # one bad thread shouldn't stop the crawl; it's retried next run
+                        log.warning("Topic %d failed, skipping: %s", t["id"], e)
+                        continue
                     fetched += 1
                     log.info("[%s p%d] topic %d %r (%d requests)", slug, page, t["id"], (t.get("title") or "")[:60], requests)
                 if not (data or {}).get("topic_list", {}).get("more_topics_url"):

@@ -46,7 +46,8 @@ def _apply(conn, username: str, raw_id: int, status: int | None, body: dict | No
     if status != 200 or not body or "user" not in body:
         conn.execute(
             """INSERT INTO forum_accounts (username, found, fetched_at, raw_page_id) VALUES (%s, false, now(), %s)
-               ON CONFLICT (username) DO UPDATE SET found = false, fetched_at = now(), raw_page_id = EXCLUDED.raw_page_id""",
+               ON CONFLICT (username) DO UPDATE SET found = false, fetched_at = now(), raw_page_id = EXCLUDED.raw_page_id,
+                   failures = 0""",
             (username, raw_id),
         )
         return 0
@@ -69,7 +70,8 @@ def _apply(conn, username: str, raw_id: int, status: int | None, body: dict | No
                    account_created = EXCLUDED.account_created, last_posted_at = EXCLUDED.last_posted_at,
                    last_seen_at = EXCLUDED.last_seen_at, post_count = EXCLUDED.post_count,
                    time_read_s = EXCLUDED.time_read_s, profile_views = EXCLUDED.profile_views,
-                   alias_count = EXCLUDED.alias_count, fetched_at = now(), raw_page_id = EXCLUDED.raw_page_id""",
+                   alias_count = EXCLUDED.alias_count, fetched_at = now(), raw_page_id = EXCLUDED.raw_page_id,
+                   failures = 0""",
             (username, u.get("id"), u.get("name"), _bio_text(u.get("bio_cooked")), u.get("created_at"),
              u.get("last_posted_at"), u.get("last_seen_at"), u.get("post_count"), u.get("time_read"),
              u.get("profile_view_count"), len(aliases), raw_id),
@@ -104,30 +106,44 @@ def _apply(conn, username: str, raw_id: int, status: int | None, body: dict | No
     return len(aliases)
 
 
-def fetch(conn, limit: int | None = None, delay: float = 1.5, refresh_days: int = 30, **_) -> None:
+def fetch(conn, limit: int | None = None, delay: float = 1.5, refresh_days: int = 30,
+          retry_failed: bool = False, **_) -> None:
+    """Fetch profiles, most recent posters first. Accounts whose fetch failed after all retries
+    are skipped unless `retry_failed`."""
     src = source_id(conn, SOURCE)
     todo = conn.execute(
         f"""SELECT a.author FROM ({ACCOUNTS_SQL}) a
             LEFT JOIN forum_accounts fa ON fa.username = a.author
-            WHERE fa.fetched_at IS NULL OR fa.fetched_at < now() - make_interval(days => %(days)s)
+            WHERE (fa.fetched_at IS NULL OR fa.fetched_at < now() - make_interval(days => %(days)s))
+              AND (%(retry)s OR coalesce(fa.failures, 0) = 0)
             ORDER BY a.last_post DESC
             LIMIT %(limit)s""",
-        {"src": src, "days": refresh_days, "limit": limit},
+        {"src": src, "days": refresh_days, "limit": limit, "retry": retry_failed},
     ).fetchall()
     log.info("%d forum profiles to fetch", len(todo))
     fetcher = Fetcher(conn, src, delay=delay)
     try:
-        chars = found = 0
+        chars = found = errors = 0
         for i, (username,) in enumerate(todo, 1):
-            raw_id, body = fetcher.get_json(f"{BASE}/u/{quote(username, safe='')}.json", "user_profile")
-            status = fetcher.last_status
-            n = _apply(conn, username, raw_id, status, body)
-            conn.execute("UPDATE raw_pages SET parsed_at = now() WHERE id = %s", (raw_id,))
+            try:
+                raw_id, body = fetcher.get_json(f"{BASE}/u/{quote(username, safe='')}.json", "user_profile")
+                status = fetcher.last_status
+                n = _apply(conn, username, raw_id, status, body)
+                conn.execute("UPDATE raw_pages SET parsed_at = now() WHERE id = %s", (raw_id,))
+            except Exception as e:  # one bad account shouldn't stop the run
+                log.warning("Profile fetch failed for %s, skipped from now on (--retry-failed): %s", username, e)
+                conn.execute(
+                    """INSERT INTO forum_accounts (username, failures) VALUES (%s, 1)
+                       ON CONFLICT (username) DO UPDATE SET failures = forum_accounts.failures + 1""",
+                    (username,),
+                )
+                errors += 1
+                continue
             chars += n
             found += status == 200
             if i % 100 == 0:
                 log.info("  %d/%d profiles, %d found, %d characters listed", i, len(todo), found, chars)
-        log.info("Done: %d/%d profiles found, %d characters listed", found, len(todo), chars)
+        log.info("Done: %d/%d profiles found, %d characters listed (%d errors)", found, len(todo), chars, errors)
     finally:
         fetcher.close()
 
