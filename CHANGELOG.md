@@ -6,6 +6,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Forum profiles source (`fetch profiles` / `parse profiles`): each forum account's public profile
+  with every character on the Battle.net account (realm, class, race, level, achievement points,
+  Classic flag), linked as `player_characters.how = 'account_alias'`, plus account stats and the
+  "About me" text in the new `forum_accounts` table. Blizzard links these characters, so alts are
+  verified rather than guessed.
+- `characters.classic`, `level`, `achievement_points`. Characters flagged Classic are no longer
+  looked up on Raider.IO (it only covers retail).
 - Top-5% Mythic+ line for every season with Raider.IO curve data (`mplus_cutoffs` rows with
   `percentile = 95`, `derived = true`), interpolated from the season's score curve. Blizzard adds
   a top-5% reward in Midnight Season 3 (ranked per spec from then on; these lines are for all players).
@@ -13,6 +20,11 @@ versions follow [Semantic Versioning](https://semver.org/).
   reverse of `mplus_percentile`.
 - `unknown_realms`: realms Raider.IO says don't exist in the US region (mostly Classic realms of
   players posting in retail forums). Characters on them are no longer looked up.
+
+### Changed
+- The owner's characters and labels are ordinary self-reported data (`players.key = 'self:owner'`,
+  `gold_labels.confidence = 'self_reported'`), not a gold standard. Weekly snapshots now track
+  every self-reported character (e.g. survey respondents), not just gold-labelled players.
 
 ### Fixed
 - A successful Raider.IO snapshot now marks the character as found and fills in class, spec, race,
