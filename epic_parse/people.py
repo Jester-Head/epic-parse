@@ -18,6 +18,8 @@ import logging
 log = logging.getLogger(__name__)
 
 TIER_ORDER = ["casual", "mid1", "mid2", "hardcore"]  # 'none' and NULL rank below casual
+MILESTONE_ORDER = ["Keystone Explorer", "Keystone Conqueror", "Keystone Master", "Keystone Hero",
+                   "Keystone Legend", "Keystone Myth"]
 # people.peak_tier also uses 'none' (looked up, no Mythic+ score), 'no_pct_data' (scores only in
 # Legion-Shadowlands S2, which have no percentile data) and NULL (not looked up on Raider.IO yet).
 
@@ -41,11 +43,12 @@ def refresh(conn) -> tuple[int, int]:
                 SELECT player_id, season, count(DISTINCT character_id) AS n FROM cs GROUP BY 1, 2
             )
             INSERT INTO player_seasons (player_id, season, best_character_id, best_character, class, score,
-                                        pct, tier, elite, characters_with_score, provisional)
+                                        pct, tier, elite, characters_with_score, provisional, milestones, milestone)
             SELECT b.player_id, b.season, b.character_id, b.character, b.class, b.score,
                    mplus_percentile(b.season, b.score), mplus_tier(b.season, b.score),
-                   mplus_percentile(b.season, b.score) <= 0.1, a.n, s.ends > now()
+                   mplus_percentile(b.season, b.score) <= 0.1, a.n, s.ends > now(), m.ms, m.ms[cardinality(m.ms)]
             FROM best b JOIN alts a USING (player_id, season) JOIN mplus_seasons s ON s.slug = b.season
+            CROSS JOIN LATERAL (SELECT mplus_milestones(b.season, b.score) AS ms) m
             """
         ).rowcount
 
@@ -81,10 +84,13 @@ def refresh(conn) -> tuple[int, int]:
                        (array_agg(class ORDER BY starts DESC))[1] AS main_class,
                        min(pct) AS best_pct,
                        (array_agg(season ORDER BY pct ASC NULLS LAST))[1] AS best_pct_season,
-                       (%(tiers)s::text[])[max(array_position(%(tiers)s::text[], tier))] AS peak_tier
+                       (%(tiers)s::text[])[max(array_position(%(tiers)s::text[], tier))] AS peak_tier,
+                       (%(milestones)s::text[])[max(array_position(%(milestones)s::text[], milestone))] AS best_milestone,
+                       (array_agg(season ORDER BY array_position(%(milestones)s::text[], milestone) DESC NULLS LAST, starts DESC)
+                           FILTER (WHERE milestone IS NOT NULL))[1] AS best_milestone_season
                 FROM ps GROUP BY 1
             ), cur_season AS (
-                SELECT ps.player_id, ps.score, ps.pct, ps.tier FROM ps JOIN cur ON cur.slug = ps.season
+                SELECT ps.player_id, ps.score, ps.pct, ps.tier, ps.milestone FROM ps JOIN cur ON cur.slug = ps.season
             ), posts_by AS (   -- forum activity (crawled posts carry the account name as author)
                 SELECT author, count(*) AS n, min(created_at) AS first_post, max(created_at) AS last_post,
                        avg((extra->>'game_version' = 'retail')::int) AS retail_share
@@ -115,7 +121,8 @@ def refresh(conn) -> tuple[int, int]:
                                 classic_characters, raiderio_found, shared_characters, main_character, main_class,
                                 mplus_seasons, first_mplus_season, last_mplus_season, best_pct, best_pct_season,
                                 peak_tier, current_score, current_pct, current_tier, pvp_best_rating, pvp_best_bracket,
-                                honor_level, achievement_points, mounts, pets, toys, last_login)
+                                honor_level, achievement_points, mounts, pets, toys, last_login,
+                                best_milestone, best_milestone_season, current_milestone)
             SELECT pl.id, pl.key, u.username, fa.account_created, fa.post_count, pb.n,
                    pb.first_post, pb.last_post, round(pb.retail_share, 3), tc.category,
                    coalesce(cs.characters, 0), coalesce(cs.retail, 0), coalesce(cs.classic, 0),
@@ -126,7 +133,8 @@ def refresh(conn) -> tuple[int, int]:
                         WHEN coalesce(m.seasons, 0) > 0 THEN 'no_pct_data'  -- scores only in seasons without percentiles
                         WHEN cs.found > 0 THEN 'none' END,
                    cu.score, cu.pct, cu.tier, pv.rating, pv.bracket,
-                   bn.honor_level, bn.ap, bn.mounts, bn.pets, bn.toys, bn.last_login
+                   bn.honor_level, bn.ap, bn.mounts, bn.pets, bn.toys, bn.last_login,
+                   m.best_milestone, m.best_milestone_season, cu.milestone
             FROM players pl
             LEFT JOIN LATERAL (SELECT CASE WHEN pl.key LIKE 'forum:%%' THEN substr(pl.key, 7) END AS username) u ON true
             LEFT JOIN forum_accounts fa ON fa.username = u.username
@@ -139,7 +147,7 @@ def refresh(conn) -> tuple[int, int]:
             LEFT JOIN pvp pv ON pv.player_id = pl.id
             LEFT JOIN bnet bn ON bn.player_id = pl.id
             """,
-            {"tiers": TIER_ORDER},
+            {"tiers": TIER_ORDER, "milestones": MILESTONE_ORDER},
         ).rowcount
     log.info("Rebuilt people: %s people, %s person-seasons", f"{people:,}", f"{seasons:,}")
     return people, seasons
