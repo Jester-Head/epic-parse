@@ -31,8 +31,10 @@ PERCENTILES = {"p999": 99.9, "p990": 99.0, "p900": 90.0, "p750": 75.0, "p600": 6
 # these lines are for all players).
 DERIVED_PERCENTILES = [95.0]
 UNKNOWN_REALM = re.compile(r"^Failed to find realm (.+) in region")
-# Characters on realms Raider.IO said don't exist are skipped.
-NOT_UNKNOWN_REALM = "NOT EXISTS (SELECT 1 FROM unknown_realms u WHERE u.region = ch.region AND u.realm = ch.realm)"
+# Skipped: characters on realms Raider.IO said don't exist, and characters the forum alias
+# lists mark as Classic (Raider.IO only covers retail).
+NOT_UNKNOWN_REALM = ("NOT EXISTS (SELECT 1 FROM unknown_realms u WHERE u.region = ch.region AND u.realm = ch.realm)"
+                     " AND ch.classic IS NOT TRUE")
 SINCE = "2018-09-01"  # BfA Season 1 start (Raider.IO has no percentile cutoffs before Shadowlands S3)
 
 # Characters behind retail forum posts. Crawled posts store the posting character as

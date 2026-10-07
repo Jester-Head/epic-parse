@@ -45,6 +45,17 @@ Category slugs are the ones in forum URLs, e.g. `gameplay`, `classes`, `pvp`, `l
 `wow-classic`, or a subcategory such as `paladin` or `professions`. Realm forums (retail
 and Classic) and the Off-Topic/Support/Recruitment categories are always skipped.
 
+## Forum profiles (alts)
+
+```bash
+python -m epic_parse fetch profiles     # one request per forum account that posted in crawled threads
+```
+
+Each forum account's public profile lists every character on its Battle.net account (realm, class,
+race, level, achievement points, Classic or retail). They're stored in `characters` and linked to
+the account in `player_characters` (`how = 'account_alias'`); account stats and "About me" go in
+`forum_accounts`. Expect many forum characters to have no Raider.IO data and vice versa.
+
 ## Patch tagging
 
 Every forum post gets `game_version` (retail / classic / forever), `expansion` and, for retail,
@@ -110,6 +121,8 @@ db/schema.sql                         tables: sources, raw_pages, threads, posts
 epic_parse/db.py                      connection (.env) and init-db
 epic_parse/fetch.py                   polite fetcher: delay, retries, saves to raw_pages
 epic_parse/sources/blizzard_forums.py fetch + parse for the Blizzard forums
+epic_parse/sources/forum_profiles.py  forum account profiles: alts, account stats, About me
+epic_parse/sources/raiderio.py        Raider.IO seasons, cutoffs, character lookups, weekly snapshots
 epic_parse/wow_patches.py             patch dates and game version / expansion / patch tagging
 epic_parse/importers/v1_archive.py    one-off importers for v1 data files
 scripts/backup.ps1                    database backup (run weekly by Task Scheduler)

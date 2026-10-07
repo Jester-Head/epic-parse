@@ -299,7 +299,8 @@ CREATE TABLE IF NOT EXISTS players (
 CREATE TABLE IF NOT EXISTS player_characters (
     player_id    bigint REFERENCES players,
     character_id bigint REFERENCES characters,
-    how          text NOT NULL,           -- 'forum_alias' (posted as it) or 'self_reported'
+    how          text NOT NULL,           -- 'forum_alias' (posted as it), 'account_alias' (listed on the
+                                          -- forum account's profile but not posted as) or 'self_reported'
     role         text,                    -- e.g. 'main this season', 'occasional alt'
     PRIMARY KEY (player_id, character_id)
 );
@@ -318,5 +319,30 @@ CREATE TABLE IF NOT EXISTS gold_labels (
     labeled_by text NOT NULL,
     labeled_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Public profiles of forum accounts (forum_profiles source). Account stats, the "About me"
+-- text, and (via player_characters how = 'account_alias') every character on the account.
+CREATE TABLE IF NOT EXISTS forum_accounts (
+    username        text PRIMARY KEY,         -- forum username, e.g. 'WhovianIV-2296788'
+    found           boolean,                  -- false = profile gone (404)
+    user_id         bigint,
+    display_name    text,
+    bio             text,                     -- "About me" as plain text, if filled in
+    account_created timestamptz,
+    last_posted_at  timestamptz,
+    last_seen_at    timestamptz,
+    post_count      int,
+    time_read_s     bigint,                   -- seconds spent reading the forums
+    profile_views   int,
+    alias_count     int,                      -- characters listed on the account
+    fetched_at      timestamptz,
+    raw_page_id     bigint
+);
+
+-- From the forum alias lists: whether a character is on Classic, its level and achievement
+-- points. Raider.IO only covers retail, so classic = true characters aren't looked up there.
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS classic boolean;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS level int;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS achievement_points int;
 
 INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio') ON CONFLICT DO NOTHING;
