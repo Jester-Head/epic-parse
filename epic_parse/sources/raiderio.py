@@ -17,6 +17,7 @@ import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+from epic_parse import projection
 from epic_parse.db import connect, source_id
 from epic_parse.fetch import Fetcher
 
@@ -98,6 +99,7 @@ def _fetch_seasons(conn, fetcher: Fetcher) -> list[str]:
                     (slug[0], pct, band["quantileMinValue"], band.get("quantilePopulationCount")),
                 )
     store_derived_cutoffs(conn)
+    projection.refresh(conn)
     return seasons
 
 
@@ -138,7 +140,7 @@ def _store_curve(conn, season: str, cutoffs: dict) -> None:
                    VALUES (%s, %s, to_timestamp(%s / 1000.0), %s, %s) ON CONFLICT DO NOTHING""",
                 [(season, PERCENTILES[key], pt["x"], pt["y"], pt.get("total"))
                  for key, line in (cutoffs.get("graphData") or {}).items() if key in PERCENTILES
-                 for pt in line.get("data", [])],
+                 for pt in line.get("data", []) if pt.get("y")],  # y = 0 marks the empty season start
             )
 
 
