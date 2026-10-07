@@ -185,7 +185,9 @@ def latest_categories(conn, src: int) -> dict[int, dict]:
 def realm_from_username(username: str | None) -> str | None:
     """'Rozzezz-malganis' -> 'malganis'. Newer usernames end in an account number instead."""
     if username and "-" in username:
-        tail = username.split("-", 1)[1]
+        # Strip a trailing account number ("wyrmrest-accord-3387509"); short ones are
+        # part of the realm name ("area-52").
+        tail = re.sub(r"-\d{4,}$", "", username.split("-", 1)[1])
         if not tail.isdigit():
             return tail
     return None

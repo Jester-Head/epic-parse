@@ -3,6 +3,25 @@
 All notable changes to Epic-Parse. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Top-5% Mythic+ line for every season with Raider.IO curve data (`mplus_cutoffs` rows with
+  `percentile = 95`, `derived = true`), interpolated from the season's score curve. Blizzard adds
+  a top-5% reward in Midnight Season 3 (ranked per spec from then on; these lines are for all players).
+- `mplus_score_at(season, percent [, at])`: the score needed for the top N% of a season, the
+  reverse of `mplus_percentile`.
+- `unknown_realms`: realms Raider.IO says don't exist in the US region (mostly Classic realms of
+  players posting in retail forums). Characters on them are no longer looked up.
+
+### Fixed
+- A successful Raider.IO snapshot now marks the character as found and fills in class, spec, race,
+  faction and the current-season score (1,181 characters were stuck as "not looked up").
+- Seasons Raider.IO has no cutoffs for (BfA S1–4, Shadowlands S1–2) are no longer requested on
+  every run (`mplus_seasons.has_cutoffs`).
+- Realms parsed from forum usernames no longer keep a trailing account number
+  (`wyrmrest-accord-3387509`); 1,551 posts corrected.
+
 ## [0.3.0] - 2026-10-04
 
 ### Added

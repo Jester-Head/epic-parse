@@ -206,6 +206,53 @@ RETURNS numeric LANGUAGE sql STABLE AS $$
     END, 3)
 $$;
 
+-- The reverse of mplus_percentile: the score needed to be in the top p_pct percent of a
+-- season (e.g. 5 -> the top-5% line). Same points and log-linear interpolation; with p_at,
+-- uses the percentile lines as they stood on that date (only 0.1/1/10/25/40% exist there,
+-- so in-between values are coarser). NULL if the season has no curve data or p_pct is
+-- outside the known points.
+CREATE OR REPLACE FUNCTION mplus_score_at(p_season text, p_pct numeric, p_at timestamptz DEFAULT NULL)
+RETURNS numeric LANGUAGE sql STABLE AS $$
+    WITH pts AS (
+        SELECT min_score AS s, fraction AS f FROM mplus_percentile_points
+        WHERE season = p_season AND p_at IS NULL AND fraction > 0
+        UNION ALL
+        SELECT * FROM (
+            SELECT DISTINCT ON (percentile) min_score, (100 - percentile) / 100.0
+            FROM mplus_cutoff_history
+            WHERE season = p_season AND p_at IS NOT NULL AND at <= p_at
+            ORDER BY percentile, at DESC
+        ) h
+    ),
+    t AS (SELECT p_pct / 100.0 AS f),
+    -- round(.., 5): Raider.IO's lines sit a hair off their nominal share (0.1% is 0.1002%)
+    lo AS (SELECT s, f FROM pts WHERE round(f, 5) >= round((SELECT f FROM t), 5) ORDER BY f ASC, s DESC LIMIT 1),  -- lower score side
+    hi AS (SELECT s, f FROM pts WHERE round(f, 5) <= round((SELECT f FROM t), 5) ORDER BY f DESC, s ASC LIMIT 1)   -- higher score side
+    SELECT round(CASE
+        WHEN NOT EXISTS (SELECT 1 FROM lo) OR NOT EXISTS (SELECT 1 FROM hi) THEN NULL
+        WHEN (SELECT f FROM hi) = (SELECT f FROM lo) THEN (SELECT s FROM lo)
+        ELSE (SELECT s FROM lo) + (ln((SELECT f FROM t)) - ln((SELECT f FROM lo)))
+             / (ln((SELECT f FROM hi)) - ln((SELECT f FROM lo))) * ((SELECT s FROM hi) - (SELECT s FROM lo))
+    END, 2)
+$$;
+
+-- Raider.IO publishes 99.9/99/90/75/60 lines only. Extra lines (e.g. top 5%, a Blizzard
+-- reward tier from Midnight Season 3) are interpolated with mplus_score_at and marked derived.
+ALTER TABLE mplus_cutoffs ADD COLUMN IF NOT EXISTS derived boolean NOT NULL DEFAULT false;
+
+-- false = Raider.IO has no cutoff data for the season (seasons before Shadowlands S3);
+-- such seasons aren't requested again.
+ALTER TABLE mplus_seasons ADD COLUMN IF NOT EXISTS has_cutoffs boolean;
+
+-- Realms Raider.IO says don't exist in the region (mostly Classic realms of players posting
+-- in retail forums). Characters on them are marked found = false and never looked up.
+CREATE TABLE IF NOT EXISTS unknown_realms (
+    region     text NOT NULL,
+    realm      text NOT NULL,
+    first_seen timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (region, realm)
+);
+
 -- What the rules were each season, so scores and words are read in their own era.
 -- Raw scores are not comparable across eras (level squishes, scoring reworks, moving
 -- achievement goalposts); compare percentiles within a season instead. NULL = not yet

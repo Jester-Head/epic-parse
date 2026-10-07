@@ -26,6 +26,13 @@ REGION = "us"
 EXPANSIONS = [7, 8, 9, 10, 11]  # Battle for Azeroth through Midnight
 MAIN_SEASON = re.compile(r"^season-(bfa|sl|df|tww|mn)-\d+$")  # skips event variants like '-break-the-meta'
 PERCENTILES = {"p999": 99.9, "p990": 99.0, "p900": 90.0, "p750": 75.0, "p600": 60.0}
+# Lines Raider.IO doesn't publish, interpolated from the season's curve (mplus_score_at).
+# Top 5% is a Blizzard reward tier from Midnight Season 3 (ranked per spec from then on;
+# these lines are for all players).
+DERIVED_PERCENTILES = [95.0]
+UNKNOWN_REALM = re.compile(r"^Failed to find realm (.+) in region")
+# Characters on realms Raider.IO said don't exist are skipped.
+NOT_UNKNOWN_REALM = "NOT EXISTS (SELECT 1 FROM unknown_realms u WHERE u.region = ch.region AND u.realm = ch.realm)"
 SINCE = "2018-09-01"  # BfA Season 1 start (Raider.IO has no percentile cutoffs before Shadowlands S3)
 
 # Characters behind retail forum posts. Crawled posts store the posting character as
@@ -59,13 +66,21 @@ def _fetch_seasons(conn, fetcher: Fetcher) -> list[str]:
                 )
     seasons = [r[0] for r in conn.execute("SELECT slug FROM mplus_seasons ORDER BY starts")]
     # Cutoffs: refresh seasons that are still running or that we don't have yet.
+    # Seasons Raider.IO has no cutoffs for (has_cutoffs = false) aren't asked again.
     for slug in conn.execute(
         "SELECT slug FROM mplus_seasons s WHERE ends > now() "
-        "OR NOT EXISTS (SELECT 1 FROM mplus_cutoffs c WHERE c.season = s.slug) "
-        "OR NOT EXISTS (SELECT 1 FROM mplus_percentile_points p WHERE p.season = s.slug) ORDER BY starts"
+        "OR (has_cutoffs IS DISTINCT FROM false AND ("
+        "    NOT EXISTS (SELECT 1 FROM mplus_cutoffs c WHERE c.season = s.slug AND NOT c.derived) "
+        "    OR NOT EXISTS (SELECT 1 FROM mplus_percentile_points p WHERE p.season = s.slug))) ORDER BY starts"
     ).fetchall():
-        _, data = fetcher.get_json(f"{BASE}/mythic-plus/season-cutoffs", "cutoffs",
-                                   params=_params(region=REGION, season=slug[0]))
+        raw_id, data = fetcher.get_json(f"{BASE}/mythic-plus/season-cutoffs", "cutoffs",
+                                        params=_params(region=REGION, season=slug[0]))
+        status = conn.execute("SELECT status FROM raw_pages WHERE id = %s", (raw_id,)).fetchone()[0]
+        if status == 404:
+            conn.execute("UPDATE mplus_seasons SET has_cutoffs = false WHERE slug = %s", (slug[0],))
+            continue
+        if data:
+            conn.execute("UPDATE mplus_seasons SET has_cutoffs = true WHERE slug = %s", (slug[0],))
         _store_curve(conn, slug[0], (data or {}).get("cutoffs") or {})
         for key, pct in PERCENTILES.items():
             band = ((data or {}).get("cutoffs", {}).get(key) or {}).get("all") or {}
@@ -76,7 +91,23 @@ def _fetch_seasons(conn, fetcher: Fetcher) -> list[str]:
                            population = EXCLUDED.population, fetched_at = now()""",
                     (slug[0], pct, band["quantileMinValue"], band.get("quantilePopulationCount")),
                 )
+    store_derived_cutoffs(conn)
     return seasons
+
+
+def store_derived_cutoffs(conn) -> None:
+    """Interpolate DERIVED_PERCENTILES (e.g. top 5%) for every season with curve data."""
+    for pct in DERIVED_PERCENTILES:
+        conn.execute(
+            """INSERT INTO mplus_cutoffs (season, percentile, min_score, population, derived)
+               SELECT season, %(pct)s::numeric, mplus_score_at(season, 100 - %(pct)s::numeric),
+                      round((100 - %(pct)s::numeric) / 100.0 * avg(population / fraction)), true
+               FROM mplus_percentile_points WHERE fraction > 0 AND population > 0
+               GROUP BY season HAVING mplus_score_at(season, 100 - %(pct)s::numeric) IS NOT NULL
+               ON CONFLICT (season, percentile) DO UPDATE SET min_score = EXCLUDED.min_score,
+                   population = EXCLUDED.population, derived = true, fetched_at = now()""",
+            {"pct": pct},
+        )
 
 
 def _store_curve(conn, season: str, cutoffs: dict) -> None:
@@ -105,11 +136,23 @@ def _store_curve(conn, season: str, cutoffs: dict) -> None:
             )
 
 
+def _record_not_found(conn, char_id: int, raw_id: int) -> None:
+    """Mark a failed lookup. 'Failed to find realm X' marks the whole realm unknown."""
+    msg = conn.execute("SELECT body->>'message' FROM raw_pages WHERE id = %s", (raw_id,)).fetchone()[0] or ""
+    m = UNKNOWN_REALM.match(msg)
+    if m:
+        conn.execute("INSERT INTO unknown_realms (region, realm) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                     (REGION, m.group(1)))
+        conn.execute("UPDATE characters SET found = false WHERE region = %s AND realm = %s AND found IS NULL",
+                     (REGION, m.group(1)))
+    conn.execute("UPDATE characters SET found = false, looked_up_at = now(), raw_page_id = %s "
+                 "WHERE id = %s AND found IS NOT TRUE", (raw_id, char_id))
+
+
 def _apply_profile(conn, char_id: int, raw_id: int, status: int, body: dict | None) -> bool:
     """Write one raw profile response onto its characters row. Returns found."""
     if status != 200 or not body:
-        conn.execute("UPDATE characters SET found = false, looked_up_at = now(), raw_page_id = %s WHERE id = %s",
-                     (raw_id, char_id))
+        _record_not_found(conn, char_id, raw_id)
         return False
     mplus = {s["season"]: (s.get("scores") or {}).get("all", 0) for s in body.get("mythic_plus_scores_by_season", [])}
     raid = {
@@ -147,7 +190,7 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
         todo = conn.execute(
             f"""SELECT ch.id, ch.realm, ch.name
                 FROM characters ch JOIN ({CANDIDATES_SQL}) c ON c.realm = ch.realm AND lower(c.name) = lower(ch.name)
-                WHERE ch.region = %(region)s
+                WHERE ch.region = %(region)s AND {NOT_UNKNOWN_REALM}
                   AND (ch.looked_up_at IS NULL OR ch.looked_up_at < now() - make_interval(days => %(days)s))
                 ORDER BY c.last_post DESC
                 LIMIT %(limit)s""",
@@ -220,6 +263,23 @@ def link_forum_players(conn) -> int:
     return linked
 
 
+def _mark_found_from_snapshot(conn, char_id: int, season: str, score, body: dict) -> None:
+    """A successful snapshot proves the character exists: fill in what the profile says.
+
+    looked_up_at stays untouched, so the full lookup (all seasons, raids) still happens.
+    """
+    conn.execute(
+        """UPDATE characters SET found = true,
+               class = coalesce(%(class)s, class), spec = coalesce(%(spec)s, spec),
+               race = coalesce(%(race)s, race), faction = coalesce(%(faction)s, faction),
+               mplus = CASE WHEN %(score)s::numeric IS NULL THEN mplus
+                            ELSE mplus || jsonb_build_object(%(season)s::text, %(score)s::numeric) END
+           WHERE id = %(id)s""",
+        {"id": char_id, "season": season, "score": score, "class": body.get("class"),
+         "spec": body.get("active_spec_name"), "race": body.get("race"), "faction": body.get("faction")},
+    )
+
+
 def current_season(conn) -> str | None:
     row = conn.execute(
         "SELECT slug FROM mplus_seasons WHERE starts <= now() AND (ends IS NULL OR ends > now()) "
@@ -241,7 +301,7 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
         season = current_season(conn)
         link_forum_players(conn)
         targets = conn.execute(
-            """WITH season_posters AS (  -- distinct characters that posted this season (one pass over posts)
+            f"""WITH season_posters AS (  -- distinct characters that posted this season (one pass over posts)
                    SELECT DISTINCT realm_slug(extra->>'realm') AS realm,
                           lower(split_part(coalesce(extra->>'character', author), '-', 1)) AS lname
                    FROM posts
@@ -253,7 +313,7 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                )
                SELECT ch.id, ch.realm, ch.name FROM characters ch
                LEFT JOIN season_posters sp ON sp.realm = ch.realm AND sp.lname = lower(ch.name)
-               WHERE ch.region = %(region)s AND ch.found IS DISTINCT FROM false
+               WHERE ch.region = %(region)s AND ch.found IS DISTINCT FROM false AND {NOT_UNKNOWN_REALM}
                  AND NOT EXISTS (SELECT 1 FROM character_snapshots s
                                  WHERE s.character_id = ch.id AND s.taken_at > now() - interval '5 days')
                  AND (ch.id IN (SELECT character_id FROM gold)
@@ -271,8 +331,7 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                                fields=f"mythic_plus_scores_by_season:{season},gear,mythic_plus_best_runs:all"),
             )
             if not body:
-                conn.execute("UPDATE characters SET found = false, looked_up_at = now() WHERE id = %s AND found IS NULL",
-                             (char_id,))
+                _record_not_found(conn, char_id, raw_id)
                 continue
             score = next((x.get("scores", {}).get("all") for x in body.get("mythic_plus_scores_by_season", [])
                           if x.get("season") == season), None)
@@ -282,6 +341,7 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                 (char_id, season, score, (body.get("gear") or {}).get("item_level_equipped"),
                  len(body.get("mythic_plus_best_runs") or []), body.get("active_spec_name"), raw_id),
             )
+            _mark_found_from_snapshot(conn, char_id, season, score, body)
             taken += 1
             if i % 100 == 0:
                 log.info("  %d/%d", i, len(targets))
