@@ -6,6 +6,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Reddit source (`fetch reddit`): posts and comments from 16 WoW subreddits (retail, Classic and WoW
+  Forever; list in `reddit.SUBREDDITS`) through Reddit's API (application-only OAuth). Threads are re-fetched when their comment
+  count changes. Guardrails: about 40 requests a minute and a pause when Reddit's rate-limit header runs
+  low; Reddit authors are never matched to forum accounts or characters; posts deleted or removed on
+  Reddit are blanked (`reddit-deletions`, and the last 14 days on every fetch); Reddit raw pages are
+  deleted after 7 days. Markdown is reduced to plain text and quoted lines go to `extra.quotes`.
 - Milestone dates and best-run dates, to recover part of a character's history from before it was
   tracked (`python -m epic_parse milestones` backfills from stored responses):
   - `milestone_achievements`: Blizzard's season keystone achievements (Explorer, Conqueror, Master, Hero,
