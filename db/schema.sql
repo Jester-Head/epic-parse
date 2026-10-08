@@ -553,6 +553,12 @@ CREATE TABLE IF NOT EXISTS character_milestones (
     PRIMARY KEY (character_id, achievement_id)
 );
 CREATE INDEX IF NOT EXISTS character_milestones_season ON character_milestones (season, milestone);
+-- When the Blizzard API last returned this row. Blizzard's API terms allow keeping its data for at most
+-- 30 days, so rows not refreshed within 30 days are deleted (blizzard_api.purge_expired).
+ALTER TABLE character_milestones ADD COLUMN IF NOT EXISTS fetched_at timestamptz;
+UPDATE character_milestones m SET fetched_at = b.fetched_at FROM bnet_characters b
+WHERE m.fetched_at IS NULL AND b.character_id = m.character_id;
+ALTER TABLE character_milestones ALTER COLUMN fetched_at SET DEFAULT now();
 
 -- Best Mythic+ run per dungeon with its completion date, as seen by Raider.IO lookups and weekly
 -- snapshots. Only current bests are visible at any moment (earlier, beaten runs are not), and every

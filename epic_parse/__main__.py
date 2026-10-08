@@ -5,7 +5,7 @@
   fetch raiderio [--limit N] [--workers N]  look up forum posters' characters on Raider.IO
   fetch profiles [--limit N]      forum account profiles: every character on the account, About me
   fetch bnet [--limit N] [--workers N]  Blizzard Profile API: PvP, achievements, collections, stats
-  snapshot [--limit N]            weekly Raider.IO snapshot of tracked characters
+  snapshot [--limit N]            weekly Raider.IO snapshot of tracked characters (first deletes expired Blizzard data)
   parse blizzard|raiderio         turn raw pages into rows
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
   tag-patches [--overwrite]       tag forum posts with game version / expansion / patch
@@ -45,6 +45,8 @@ def main() -> None:
     p_fetch.add_argument("--workers", type=int, help="raiderio / bnet: lookups to run in parallel (default 1 raiderio, 4 bnet)")
     p_fetch.add_argument("--retry-failed", action="store_true", default=None,
                          help="raiderio / bnet: also retry characters whose lookup failed after all retries before")
+    p_fetch.add_argument("--refresh-days", type=int,
+                         help="raiderio / bnet / profiles: re-fetch characters last fetched more than N days ago (default 30)")
     p_fetch.add_argument("--delay", type=float, help="seconds between requests (default: 1.5 forums and profiles, 1.2 raiderio)")
 
     p_parse = sub.add_parser("parse", help="turn unparsed raw pages into threads/posts rows")
@@ -83,13 +85,15 @@ def main() -> None:
     with db.connect() as conn:
         if args.command == "fetch":
             options = {k: v for k, v in vars(args).items()
-                       if k in ("categories", "max_pages", "max_topics", "limit", "delay", "workers", "retry_failed") and v is not None}
+                       if k in ("categories", "max_pages", "max_topics", "limit", "delay", "workers", "retry_failed",
+                                "refresh_days") and v is not None}
             SOURCES[args.source].fetch(conn, **options)
         elif args.command == "parse":
             SOURCES[args.source].parse(conn)
         elif args.command == "import-v1":
             v1_archive.run(conn, args.kind, args.path)
         elif args.command == "snapshot":
+            blizzard_api.purge_expired(conn)  # before snapshot(), which rebuilds people from what's left
             raiderio.snapshot(conn, limit=args.limit)
         elif args.command == "tag-patches":
             wow_patches.tag_posts(conn, overwrite=args.overwrite)

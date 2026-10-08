@@ -16,6 +16,10 @@ and mounts/pets/toys keep only their counts.
 fetch(): characters that posted in retail forums (same candidates as Raider.IO), newest posters
          first, skipping those fetched within `refresh_days`. Applied as it goes.
 parse(): re-applies stored responses to bnet_characters.
+purge_expired(): Blizzard's API terms allow keeping its data for at most 30 days. Deletes raw pages,
+         bnet_characters rows and milestone dates older than that, and raw pages replaced by a newer
+         copy. Runs after every fetch and before every weekly snapshot; a scheduled task re-fetches
+         everyone every 4 weeks (`fetch bnet --refresh-days 21`) so nothing reaches 30 days.
 """
 import json
 import logging
@@ -40,6 +44,7 @@ API = f"https://{REGION}.api.blizzard.com"
 PROFILE = {"namespace": f"profile-{REGION}", "locale": "en_US"}
 TOKEN_URL = "https://oauth.battle.net/token"
 TOKEN_MAX_AGE = 12 * 3600  # refresh well before the 24 h expiry
+MAX_AGE_DAYS = 30  # Blizzard Developer API terms: keep data no longer than 30 days
 
 
 class Token:
@@ -95,9 +100,14 @@ def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name
     if status != 200 or not summary:
         conn.execute(
             """INSERT INTO bnet_characters (character_id, found, fetched_at, raw_page_id) VALUES (%s, false, now(), %s)
-               ON CONFLICT (character_id) DO UPDATE SET found = false, fetched_at = now(), raw_page_id = EXCLUDED.raw_page_id""",
+               ON CONFLICT (character_id) DO UPDATE SET found = false, level = NULL, last_login = NULL,
+                   item_level = NULL, achievement_points = NULL, achievements_completed = NULL, guild = NULL,
+                   active_spec = NULL, honor_level = NULL, honorable_kills = NULL, pvp = '{}', mounts = NULL,
+                   pets = NULL, toys = NULL, fetched_at = now(), raw_page_id = EXCLUDED.raw_page_id""",
             (char_id, raw_id),
         )
+        # the terms require deleting a character's data once Blizzard stops returning it
+        conn.execute("DELETE FROM character_milestones WHERE character_id = %s", (char_id,))
         return False
 
     pvp = {}
@@ -172,8 +182,7 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
     ).fetchall()
     log.info("%d characters to look up on the Blizzard API with %d worker(s)", len(todo), workers)
     token = Token()
-    if not milestones.milestone_ids(conn):
-        milestones.refresh_achievement_map(conn, token)
+    milestones.refresh_achievement_map(conn, token)  # also Blizzard data, so refreshed every run
     milestone_ids = milestones.milestone_ids(conn)
     progress = {"done": 0, "found": 0, "errors": 0}
     lock = threading.Lock()
@@ -205,6 +214,26 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
         list(pool.map(work, [todo[i::workers] for i in range(workers)]))
     log.info("Done: %d/%d characters found on the Blizzard API (%d errors)",
              progress["found"], len(todo), progress["errors"])
+    purge_expired(conn)
+
+
+def purge_expired(conn, days: int = MAX_AGE_DAYS) -> None:
+    """Delete Blizzard API data older than `days`, and raw pages that a newer fetch replaced."""
+    src = source_id(conn, SOURCE)
+    params = {"src": src, "days": days}
+    with conn.transaction():
+        replaced = conn.execute(
+            """DELETE FROM raw_pages r WHERE r.source_id = %(src)s AND EXISTS (
+                   SELECT 1 FROM raw_pages n WHERE n.url = r.url AND n.fetched_at > r.fetched_at)""", params).rowcount
+        old = conn.execute(
+            """DELETE FROM raw_pages WHERE source_id = %(src)s
+               AND fetched_at < now() - make_interval(days => %(days)s)""", params).rowcount
+        chars = conn.execute(
+            "DELETE FROM bnet_characters WHERE fetched_at < now() - make_interval(days => %(days)s)", params).rowcount
+        ms = conn.execute(
+            "DELETE FROM character_milestones WHERE fetched_at < now() - make_interval(days => %(days)s)", params).rowcount
+    log.info("Blizzard data purge: %s replaced and %s expired raw pages, %s characters, %s milestone dates",
+             f"{replaced:,}", f"{old:,}", f"{chars:,}", f"{ms:,}")
 
 
 def parse(conn) -> None:
