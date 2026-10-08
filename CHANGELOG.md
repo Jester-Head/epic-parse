@@ -43,6 +43,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 - An analysis script that didn't belong in this project, and its optional `matplotlib` dependency.
 
 ### Changed
+- Blizzard API data is kept at most 30 days, as Blizzard's API terms require: `blizzard_api.purge_expired()`
+  deletes older raw pages, `bnet_characters` rows and milestone dates (`character_milestones.fetched_at`),
+  plus raw pages replaced by a newer fetch. It runs after every `fetch bnet` and before every weekly
+  snapshot. A scheduled task re-fetches everyone every 4 weeks (`fetch bnet --refresh-days 21`), and a
+  character Blizzard no longer returns has its stored details and milestone dates cleared.
+- `fetch --refresh-days N` sets how old a lookup must be before it is repeated (raiderio, bnet, profiles).
+- The keystone achievement map is refreshed on every `fetch bnet`.
 - Lookups that still fail after all retries are skipped by later runs instead of retried every time
   (`characters.raiderio_failures` / `bnet_failures`, `forum_accounts.failures`). `fetch raiderio | bnet |
   profiles --retry-failed` includes them again; any real answer resets the count.

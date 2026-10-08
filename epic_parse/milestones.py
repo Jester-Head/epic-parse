@@ -68,17 +68,21 @@ def milestone_ids(conn) -> set[int]:
     return {r[0] for r in conn.execute("SELECT achievement_id FROM milestone_achievements")}
 
 
-def milestones_from_achievements(conn, char_id: int, completed: list, ids: set[int]) -> int:
-    """Store the milestone achievements in a compacted [[id, ms timestamp], ...] list."""
+def milestones_from_achievements(conn, char_id: int, completed: list, ids: set[int], fetched_at=None) -> int:
+    """Store the milestone achievements in a compacted [[id, ms timestamp], ...] list.
+
+    `fetched_at` is when Blizzard returned the list (default now); it decides when the row expires.
+    """
     rows = [(char_id, a, ts) for a, ts in completed if a in ids]
     if rows:
         with conn.cursor() as cur:
             cur.executemany(
-                """INSERT INTO character_milestones (character_id, achievement_id, milestone, season, achieved_at)
-                   SELECT %s, achievement_id, milestone, season, to_timestamp(%s / 1000.0)
+                """INSERT INTO character_milestones (character_id, achievement_id, milestone, season, achieved_at, fetched_at)
+                   SELECT %s, achievement_id, milestone, season, to_timestamp(%s / 1000.0), coalesce(%s, now())
                    FROM milestone_achievements WHERE achievement_id = %s
-                   ON CONFLICT (character_id, achievement_id) DO UPDATE SET achieved_at = EXCLUDED.achieved_at""",
-                [(c, ts, a) for c, a, ts in rows],
+                   ON CONFLICT (character_id, achievement_id) DO UPDATE SET achieved_at = EXCLUDED.achieved_at,
+                       fetched_at = EXCLUDED.fetched_at""",
+                [(c, ts, fetched_at, a) for c, a, ts in rows],
             )
     return len(rows)
 
@@ -112,7 +116,7 @@ def backfill(conn, token) -> None:
              conn.execute("SELECT id, realm, name FROM characters WHERE region = 'us'")}
     src = source_id(conn, "blizzard_api")
     rows = conn.execute(  # keep only the milestone pairs in the database; full lists are ~1,700 entries each
-        """SELECT DISTINCT ON (r.url) r.url,
+        """SELECT DISTINCT ON (r.url) r.url, r.fetched_at,
                   (SELECT coalesce(jsonb_agg(e), '[]') FROM jsonb_array_elements(r.body->'completed') e
                    WHERE (e->>0)::int = ANY(%(ids)s))
            FROM raw_pages r WHERE r.source_id = %(src)s AND r.kind = 'bnet_achievements' AND r.status = 200
@@ -121,11 +125,11 @@ def backfill(conn, token) -> None:
     ).fetchall()
     pages = stored = 0
     with conn.transaction():
-        for url, completed in rows:
+        for url, fetched_at, completed in rows:
             parts = urlsplit(url).path.split("/")  # ['', 'profile', 'wow', 'character', realm, name, 'achievements']
             cid = chars.get((unquote(parts[4]), unquote(parts[5]).lower()))
             if cid and completed:
-                stored += milestones_from_achievements(conn, cid, completed, ids)
+                stored += milestones_from_achievements(conn, cid, completed, ids, fetched_at)
                 pages += 1
     log.info("Milestones backfilled: %s from %s characters' achievements", f"{stored:,}", f"{pages:,}")
 
