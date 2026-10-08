@@ -39,6 +39,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Index on `player_characters (character_id)`.
 
 ### Removed
+- The MIT license file. No license is granted; all rights reserved.
 - An analysis script that didn't belong in this project, and its optional `matplotlib` dependency.
 
 ### Changed
