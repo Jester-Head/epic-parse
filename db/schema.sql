@@ -584,4 +584,5 @@ CREATE INDEX IF NOT EXISTS character_best_runs_season ON character_best_runs (se
 ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS milestone_dates jsonb;   -- {"Keystone Master": "2026-09-02T...", ...}
 ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS last_best_run_at timestamptz;  -- latest best-run completion seen
 
-INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio'), ('blizzard_api') ON CONFLICT DO NOTHING;
+INSERT INTO sources (name) VALUES ('blizzard_forums'), ('youtube'), ('raiderio'), ('blizzard_api'), ('reddit')
+ON CONFLICT DO NOTHING;

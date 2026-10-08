@@ -25,6 +25,7 @@ class Fetcher:
         self.client = httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=True)
         self._last_request = 0.0
         self.last_status: int | None = None
+        self.last_headers: httpx.Headers = httpx.Headers()
 
     def _wait(self) -> None:
         elapsed = time.monotonic() - self._last_request
@@ -62,6 +63,7 @@ class Fetcher:
         if transform is not None and resp.status_code == 200 and data is not None:
             data = transform(data)
         self.last_status = resp.status_code
+        self.last_headers = resp.headers
         with self.conn.transaction():
             raw_id = self.conn.execute(
                 "INSERT INTO raw_pages (source_id, kind, url, status, body) VALUES (%s, %s, %s, %s, %s) RETURNING id",

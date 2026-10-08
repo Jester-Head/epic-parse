@@ -5,6 +5,8 @@
   fetch raiderio [--limit N] [--workers N]  look up forum posters' characters on Raider.IO
   fetch profiles [--limit N]      forum account profiles: every character on the account, About me
   fetch bnet [--limit N] [--workers N]  Blizzard Profile API: PvP, achievements, collections, stats
+  fetch reddit [--category SUB]   WoW subreddits: new and changed threads, then parse and deletion check
+  reddit-deletions [--days N]     blank Reddit posts deleted on Reddit (default: check everything)
   snapshot [--limit N]            weekly Raider.IO snapshot of tracked characters (first deletes expired Blizzard data)
   parse blizzard|raiderio         turn raw pages into rows
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
@@ -23,9 +25,10 @@ from psycopg import sql as pgsql
 from epic_parse import db, milestones, people, projection, wow_patches
 from epic_parse.sources.blizzard_api import Token
 from epic_parse.importers import v1_archive
-from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio
+from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio, reddit
 
-SOURCES = {"blizzard": blizzard_forums, "bnet": blizzard_api, "profiles": forum_profiles, "raiderio": raiderio}
+SOURCES = {"blizzard": blizzard_forums, "bnet": blizzard_api, "profiles": forum_profiles, "raiderio": raiderio,
+           "reddit": reddit}
 
 
 def main() -> None:
@@ -38,8 +41,8 @@ def main() -> None:
     p_fetch = sub.add_parser("fetch", help="download data from a source into raw_pages")
     p_fetch.add_argument("source", choices=SOURCES)
     p_fetch.add_argument("--category", action="append", dest="categories", metavar="SLUG",
-                         help="category to crawl, e.g. gameplay (repeatable; default: the main WoW categories)")
-    p_fetch.add_argument("--max-pages", type=int, help="topic-list pages per category (30 topics each)")
+                         help="forum category (e.g. gameplay) or, for reddit, subreddit (repeatable; default: the main ones)")
+    p_fetch.add_argument("--max-pages", type=int, help="list pages per category (30 topics each; reddit: 100 posts each)")
     p_fetch.add_argument("--max-topics", type=int, help="stop after this many new/changed topics")
     p_fetch.add_argument("--limit", type=int, help="raiderio / profiles: max lookups this run")
     p_fetch.add_argument("--workers", type=int, help="raiderio / bnet: lookups to run in parallel (default 1 raiderio, 4 bnet)")
@@ -70,6 +73,9 @@ def main() -> None:
     sub.add_parser("milestones", help="map keystone achievements and backfill milestone dates and best runs")
 
     sub.add_parser("people", help="rebuild people / player_seasons (one row per person) and summarize")
+
+    p_rdel = sub.add_parser("reddit-deletions", help="blank Reddit posts and comments deleted or removed on Reddit")
+    p_rdel.add_argument("--days", type=int, help="only items from the last N days (default: everything)")
 
     sub.add_parser("stats", help="show row counts")
 
@@ -121,6 +127,8 @@ def main() -> None:
             ]
             for label, query in summaries:
                 print(f"{label}: {conn.execute(query).fetchall()}")
+        elif args.command == "reddit-deletions":
+            reddit.check_deletions(conn, days=args.days)
         elif args.command == "stats":
             for table in ("raw_pages", "threads", "posts"):
                 count = db.scalar(conn, pgsql.SQL("SELECT count(*) FROM {}").format(pgsql.Identifier(table)))
