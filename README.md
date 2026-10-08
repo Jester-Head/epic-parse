@@ -1,174 +1,39 @@
 # Epic-Parse
 
-Collects World of Warcraft community discussion into Postgres for analysis.
-Sources so far: the official Blizzard WoW forums. Reddit, YouTube and Wowhead come next.
+Collects World of Warcraft community data into PostgreSQL.
 
-The original MongoDB/Scrapy version is preserved in the git tag `v1-archive`.
+Sources:
+- Blizzard WoW forums (threads, posts, and posters' public forum profiles)
+- Raider.IO (Mythic+ scores, seasons and cutoffs)
+- Blizzard Profile API (achievements, PvP, collections)
 
-## How it works
+Every response is saved as-is in `raw_pages`. Parsers then turn the saved pages into tables, so a
+parser can be fixed and re-run without downloading anything again.
 
-1. **fetch** downloads pages from a source and stores every response untouched in `raw_pages`.
-2. **parse** turns raw pages into clean `threads` and `posts` rows.
+## What it does
 
-Because the raw data is kept, a parser can be fixed or extended and re-run without
-scraping again. Fields every source shares are real columns; anything source-specific
-(likes, class, realm, quotes, ...) goes in the `extra` JSONB column.
-
-## Setup (Windows)
-
-Requires Python 3.11+ and PostgreSQL (tested with 18).
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e .
-copy .env.example .env      # then put your Postgres password in .env
-python -m epic_parse init-db
-```
-
-## Usage
-
-```bash
-# small test: 5 threads from one category
-python -m epic_parse fetch blizzard --category gameplay --max-topics 5
-python -m epic_parse parse blizzard
-python -m epic_parse stats
-
-# everything in the default categories (takes a long time; safe to stop and resume)
-python -m epic_parse fetch blizzard
-```
-
-Re-running `fetch` skips threads that haven't had new posts since they were last fetched,
-and only downloads posts that aren't stored yet.
-
-Category slugs are the ones in forum URLs, e.g. `gameplay`, `classes`, `pvp`, `lore`,
-`wow-classic`, or a subcategory such as `paladin` or `professions`. Realm forums (retail
-and Classic) and the Off-Topic/Support/Recruitment categories are always skipped.
-
-## Forum profiles (alts)
-
-```bash
-python -m epic_parse fetch profiles     # one request per forum account that posted in crawled threads
-```
-
-Each forum account's public profile lists every character on its Battle.net account (realm, class,
-race, level, achievement points, Classic or retail). They're stored in `characters` and linked to
-the account in `player_characters` (`how = 'account_alias'`); account stats and "About me" go in
-`forum_accounts`. Expect many forum characters to have no Raider.IO data and vice versa.
-
-## Blizzard Profile API
-
-```bash
-python -m epic_parse fetch bnet         # needs BLIZZARD_CLIENT_ID / BLIZZARD_CLIENT_SECRET in .env
-```
-
-For forum posters' retail characters: PvP ratings, achievements with dates, collections, lifetime
-statistics, raid kills, item level and last login (`bnet_characters`; details in raw `bnet_*` pages).
-Characters that haven't logged in for a long time return "not found" from Blizzard.
-
-## Mythic+ cutoff projections
-
-```bash
-python -m epic_parse projection --backtest
-```
-
-Projects where each percentile line (top 0.1/1/5/10/25/40%) will end the season, from how far
-along the same line was on the same day in finished seasons, with a low-high range and a backtest
-of past accuracy. The `snapshot_pace` view puts each weekly character snapshot next to its same-day
-percentile and the projected final lines.
-
-```sql
--- where would this score land if the season ended at the projected lines?
-SELECT * FROM mplus_cutoff_projection('season-mn-2', 99);
-SELECT name, realm, taken_at, score, pct_same_day, proj_top_1, proj_top_5 FROM snapshot_pace;
-```
-
-## One row per person
-
-```bash
-python -m epic_parse people     # rebuild people / player_seasons (the weekly snapshot does this too)
-```
-
-Raider.IO, the Blizzard API and the forums describe characters; `people` combines each forum
-account's characters (posted as, listed on the profile, or self-reported) into one row: forum
-activity, characters, Mythic+ history and tier, PvP and collections. `player_seasons` has one row
-per person per Mythic+ season with their best character.
-
-```sql
-SELECT forum_username, main_character, peak_tier, best_pct, current_tier, pvp_best_rating, mounts
-FROM people WHERE current_score IS NOT NULL ORDER BY current_score DESC LIMIT 20;
-```
-
-## Patch tagging
-
-Every forum post gets `game_version` (retail / classic / forever), `expansion` and, for retail,
-`patch` in its `extra` column, based on the post date and forum. `parse` tags new posts
-automatically. After adding a patch to `epic_parse/wow_patches.py`, re-tag everything with:
-
-```bash
-python -m epic_parse tag-patches --overwrite
-```
-
-## Importing v1 data
-
-Data collected by the old version can be loaded once per file:
-
-```bash
-python -m epic_parse import-v1 forum-log    path\to\spider.log            # forum posts logged by the v1 crawler
-python -m epic_parse import-v1 youtube-json path\to\yt_comments.json      # raw YouTube API comment threads
-python -m epic_parse import-v1 youtube-csv  path\to\comments.csv          # flattened YouTube comment exports
-```
-
-Imported rows are tagged `extra->>'v1_import' = 'true'`. If a live crawl later fetches
-the same post, the crawled version replaces the imported one.
-
-## Backups
-
-`scripts\backup.ps1` dumps the database (compressed, about 1 GB), checks the dump is readable,
-keeps the newest 4 in `%USERPROFILE%\backups\epic_parse`, and copies the newest to
-`OneDrive\Backups\epic_parse\epic_parse_latest.dump`. A Windows scheduled task
-("Epic-Parse weekly DB backup") runs it every Sunday at 3 AM, or at the next login if the
-PC was off. Results are logged to `backup.log` in the backup folder.
-
-```bash
-# back up now
-powershell -ExecutionPolicy Bypass -File scripts\backup.ps1
-
-# restore into a fresh database (drop or rename the old one first)
-"C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" --create --dbname=postgres path\to\epic_parse_....dump
-```
-
-## Example queries
-
-```sql
--- posts mentioning "nerf", newest first
-SELECT t.title, p.author, p.created_at, left(p.body, 120)
-FROM posts p JOIN threads t ON t.id = p.thread_id
-WHERE p.body_tsv @@ plainto_tsquery('english', 'nerf')
-ORDER BY p.created_at DESC;
-
--- posts per expansion and patch
-SELECT extra->>'expansion' AS expansion, extra->>'patch' AS patch, count(*)
-FROM posts WHERE extra->>'game_version' = 'retail'
-GROUP BY 1, 2 ORDER BY min(created_at);
-
--- most-liked posts by the poster's class
-SELECT extra->>'class' AS class, count(*), avg((extra->>'likes')::int) AS avg_likes
-FROM posts GROUP BY 1 ORDER BY 2 DESC;
-```
+- Crawls the forums and stores threads and posts, with full-text search
+- Tags each post with its game version, expansion and patch
+- Links forum accounts to their characters, and characters to their Raider.IO and Blizzard data
+- Takes weekly snapshots of Mythic+ scores
+- Places scores on each season's percentile curve and projects end-of-season cutoffs
+- Records when keystone milestones were reached and when best runs were completed
+- Combines each person's characters into one row per person and one row per person per season
 
 ## Layout
 
 ```
-db/schema.sql                         tables: sources, raw_pages, threads, posts
-epic_parse/db.py                      connection (.env) and init-db
-epic_parse/fetch.py                   polite fetcher: delay, retries, saves to raw_pages
-epic_parse/sources/blizzard_forums.py fetch + parse for the Blizzard forums
-epic_parse/sources/forum_profiles.py  forum account profiles: alts, account stats, About me
-epic_parse/sources/raiderio.py        Raider.IO seasons, cutoffs, character lookups, weekly snapshots
-epic_parse/wow_patches.py             patch dates and game version / expansion / patch tagging
-epic_parse/projection.py              end-of-season Mythic+ cutoff projections and backtest
-epic_parse/people.py                  one row per person (people, player_seasons)
-epic_parse/importers/v1_archive.py    one-off importers for v1 data files
-scripts/backup.ps1                    database backup (run weekly by Task Scheduler)
+db/schema.sql               tables, views and SQL functions
+epic_parse/__main__.py      command line
+epic_parse/db.py            database connection
+epic_parse/fetch.py         HTTP fetcher (delay, retries, saves to raw_pages)
+epic_parse/sources/         one module per source
+epic_parse/importers/       v1 data importers
+epic_parse/people.py        people and player_seasons
+epic_parse/projection.py    Mythic+ cutoff projections
+epic_parse/milestones.py    milestone and best-run dates
+epic_parse/wow_patches.py   patch dates
+scripts/backup.ps1          database backup
 ```
+
+The earlier MongoDB/Scrapy version is in the git tag `v1-archive`.

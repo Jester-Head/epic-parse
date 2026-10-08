@@ -45,6 +45,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Lookups that still fail after all retries are skipped by later runs instead of retried every time
   (`characters.raiderio_failures` / `bnet_failures`, `forum_accounts.failures`). `fetch raiderio | bnet |
   profiles --retry-failed` includes them again; any real answer resets the count.
+- README rewritten as a short overview: sources, what it does and layout.
 
 ### Fixed
 - Rebuilding `people` computes each person-season's percentile once (`mplus_tier_for_pct`), about
