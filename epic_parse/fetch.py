@@ -1,5 +1,6 @@
 """A polite HTTP fetcher that stores every response in raw_pages."""
 import logging
+import os
 import time
 
 import httpx
@@ -7,7 +8,8 @@ from psycopg.types.json import Jsonb
 
 log = logging.getLogger(__name__)
 
-USER_AGENT = "EpicParse/0.2 (WoW community research project; https://github.com/Jester-Head/epic-parse)"
+# Sent with every request; set HTTP_USER_AGENT in .env to identify the project to the sites it fetches.
+DEFAULT_USER_AGENT = "EpicParse/0.2"
 
 
 class Fetcher:
@@ -22,7 +24,8 @@ class Fetcher:
         self.source_id = source_id
         self.delay = delay
         self.max_retries = max_retries
-        self.client = httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=True)
+        user_agent = os.environ.get("HTTP_USER_AGENT") or DEFAULT_USER_AGENT
+        self.client = httpx.Client(headers={"User-Agent": user_agent}, timeout=30, follow_redirects=True)
         self._last_request = 0.0
         self.last_status: int | None = None
         self.last_headers: httpx.Headers = httpx.Headers()
