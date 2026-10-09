@@ -56,6 +56,7 @@ versions follow [Semantic Versioning](https://semver.org/).
   character Blizzard no longer returns has its stored details and milestone dates cleared.
 - `fetch --refresh-days N` sets how old a lookup must be before it is repeated (raiderio, bnet, profiles).
 - The keystone achievement map is refreshed on every `fetch bnet`.
+- The HTTP user agent comes from `HTTP_USER_AGENT` in `.env` (default `EpicParse/0.2`) instead of the code.
 - `fetch raiderio --alts` looks up the other characters on posters' accounts (forum profiles and
   self-reported) at level 45 and up, highest level first.
 - `--log FILE` sends all output (logging, prints, tracebacks) to a file, so scheduled runs can use
