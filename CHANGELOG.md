@@ -56,12 +56,16 @@ versions follow [Semantic Versioning](https://semver.org/).
   character Blizzard no longer returns has its stored details and milestone dates cleared.
 - `fetch --refresh-days N` sets how old a lookup must be before it is repeated (raiderio, bnet, profiles).
 - The keystone achievement map is refreshed on every `fetch bnet`.
+- `--log FILE` sends all output (logging, prints, tracebacks) to a file, so scheduled runs can use
+  `pythonw` and open no console window. Log timestamps include the date in that mode.
 - Lookups that still fail after all retries are skipped by later runs instead of retried every time
   (`characters.raiderio_failures` / `bnet_failures`, `forum_accounts.failures`). `fetch raiderio | bnet |
   profiles --retry-failed` includes them again; any real answer resets the count.
 - README rewritten as a short overview: sources and features.
 
 ### Fixed
+- Reddit reply linking refreshes table statistics first; with stale ones the first run's linking
+  query ran for 12 hours.
 - Rebuilding `people` computes each person-season's percentile once (`mplus_tier_for_pct`), about
   twice as fast; milestone and best-run columns are aggregated in one pass instead of per row.
 - One failing character, account, thread or thread-list page no longer stops a whole run: the weekly
