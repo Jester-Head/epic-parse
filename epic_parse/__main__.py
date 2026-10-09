@@ -18,6 +18,7 @@
 """
 import argparse
 import logging
+import sys
 from typing import LiteralString
 
 from psycopg import sql as pgsql
@@ -34,6 +35,8 @@ SOURCES = {"blizzard": blizzard_forums, "bnet": blizzard_api, "profiles": forum_
 def main() -> None:
     parser = argparse.ArgumentParser(prog="epic_parse", description="Collect WoW community data into Postgres.")
     parser.add_argument("-v", "--verbose", action="store_true", help="show debug logging")
+    parser.add_argument("--log", metavar="FILE",
+                        help="append all output (logging, prints, errors) to FILE; for windowless runs with pythonw")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init-db", help="create the database (if needed) and apply db/schema.sql")
@@ -80,8 +83,11 @@ def main() -> None:
     sub.add_parser("stats", help="show row counts")
 
     args = parser.parse_args()
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
-                        format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S")
+    if args.log:  # pythonw has no console, so send everything, tracebacks included, to the file
+        sys.stdout = sys.stderr = open(args.log, "a", encoding="utf-8", buffering=1)
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, stream=sys.stderr,
+                        format="%(asctime)s %(levelname)-7s %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S" if args.log else "%H:%M:%S")
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     if args.command == "init-db":

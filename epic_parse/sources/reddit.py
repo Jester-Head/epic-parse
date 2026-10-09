@@ -313,6 +313,9 @@ def parse(conn, batch_size: int = 100) -> None:
                 conn.execute("UPDATE raw_pages SET parsed_at = now() WHERE id = %s", (raw_id,))
             pages += len(batch)
 
+    # Fresh statistics first: with stale ones (e.g. the first run, when posts had no Reddit rows yet)
+    # Postgres planned this join so badly it ran for 12 hours.
+    conn.execute("ANALYZE posts")
     with conn.transaction():
         linked = conn.execute(
             """
