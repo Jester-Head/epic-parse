@@ -1,7 +1,7 @@
 [project]
 name = "epic-parse"
 version = "0.4.0"
-description = "Collect World of Warcraft community discussion (forums, Reddit, YouTube...) into Postgres"
+description = "Collect World of Warcraft community data into Postgres"
 requires-python = ">=3.11"
 dependencies = [
     "beautifulsoup4>=4.12",

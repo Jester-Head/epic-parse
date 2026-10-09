@@ -6,12 +6,6 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Reddit source (`fetch reddit`): posts and comments from 16 WoW subreddits (retail, Classic and WoW
-  Forever; list in `reddit.SUBREDDITS`) through Reddit's API (application-only OAuth). Threads are re-fetched when their comment
-  count changes. Guardrails: about 40 requests a minute and a pause when Reddit's rate-limit header runs
-  low; Reddit authors are never matched to forum accounts or characters; posts deleted or removed on
-  Reddit are blanked (`reddit-deletions`, and the last 14 days on every fetch); Reddit raw pages are
-  deleted after 7 days. Markdown is reduced to plain text and quoted lines go to `extra.quotes`.
 - Milestone dates and best-run dates, to recover part of a character's history from before it was
   tracked (`python -m epic_parse milestones` backfills from stored responses):
   - `milestone_achievements`: Blizzard's season keystone achievements (Explorer, Conqueror, Master, Hero,
@@ -59,6 +53,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - The HTTP user agent comes from `HTTP_USER_AGENT` in `.env` (default `EpicParse/0.2`) instead of the code.
 - `fetch raiderio --alts` looks up the other characters on posters' accounts (forum profiles and
   self-reported) at level 45 and up, highest level first.
+- `epic_parse/local/`: modules there (not part of the repository) can add sources and commands.
 - `--log FILE` sends all output (logging, prints, tracebacks) to a file, so scheduled runs can use
   `pythonw` and open no console window. Log timestamps include the date in that mode.
 - Lookups that still fail after all retries are skipped by later runs instead of retried every time
@@ -67,8 +62,6 @@ versions follow [Semantic Versioning](https://semver.org/).
 - README rewritten as a short overview: sources and features.
 
 ### Fixed
-- Reddit reply linking refreshes table statistics first; with stale ones the first run's linking
-  query ran for 12 hours.
 - Rebuilding `people` computes each person-season's percentile once (`mplus_tier_for_pct`), about
   twice as fast; milestone and best-run columns are aggregated in one pass instead of per row.
 - One failing character, account, thread or thread-list page no longer stops a whole run: the weekly
