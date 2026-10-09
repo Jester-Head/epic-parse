@@ -5,8 +5,6 @@
   fetch raiderio [--limit N] [--workers N] [--alts]  look up forum posters' characters (or their alts) on Raider.IO
   fetch profiles [--limit N]      forum account profiles: every character on the account, About me
   fetch bnet [--limit N] [--workers N]  Blizzard Profile API: PvP, achievements, collections, stats
-  fetch reddit [--category SUB]   WoW subreddits: new and changed threads, then parse and deletion check
-  reddit-deletions [--days N]     blank Reddit posts deleted on Reddit (default: check everything)
   snapshot [--limit N]            weekly Raider.IO snapshot of tracked characters (first deletes expired Blizzard data)
   parse blizzard|raiderio         turn raw pages into rows
   import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
@@ -15,9 +13,13 @@
   milestones                      map keystone achievements; backfill milestone dates and best runs
   people                          rebuild the one-row-per-person tables and summarize them
   stats                           row counts per table
+
+Modules in epic_parse/local/ (kept out of the repository) can add sources and commands; see load_local().
 """
 import argparse
+import importlib
 import logging
+import pkgutil
 import sys
 from typing import LiteralString
 
@@ -26,13 +28,25 @@ from psycopg import sql as pgsql
 from epic_parse import db, milestones, people, projection, wow_patches
 from epic_parse.sources.blizzard_api import Token
 from epic_parse.importers import v1_archive
-from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio, reddit
+from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio
 
-SOURCES = {"blizzard": blizzard_forums, "bnet": blizzard_api, "profiles": forum_profiles, "raiderio": raiderio,
-           "reddit": reddit}
+SOURCES = {"blizzard": blizzard_forums, "bnet": blizzard_api, "profiles": forum_profiles, "raiderio": raiderio}
+
+
+def load_local() -> list:
+    """Modules in epic_parse/local/. One with CLI_NAME becomes a `fetch`/`parse` source; one with
+    add_commands(subparsers) and run_command(conn, args) -> bool adds its own commands."""
+    try:
+        local = importlib.import_module("epic_parse.local")
+    except ImportError:
+        return []
+    modules = [importlib.import_module(f"epic_parse.local.{m.name}") for m in pkgutil.iter_modules(local.__path__)]
+    SOURCES.update({m.CLI_NAME: m for m in modules if hasattr(m, "CLI_NAME")})
+    return modules
 
 
 def main() -> None:
+    local_modules = load_local()
     parser = argparse.ArgumentParser(prog="epic_parse", description="Collect WoW community data into Postgres.")
     parser.add_argument("-v", "--verbose", action="store_true", help="show debug logging")
     parser.add_argument("--log", metavar="FILE",
@@ -44,8 +58,8 @@ def main() -> None:
     p_fetch = sub.add_parser("fetch", help="download data from a source into raw_pages")
     p_fetch.add_argument("source", choices=SOURCES)
     p_fetch.add_argument("--category", action="append", dest="categories", metavar="SLUG",
-                         help="forum category (e.g. gameplay) or, for reddit, subreddit (repeatable; default: the main ones)")
-    p_fetch.add_argument("--max-pages", type=int, help="list pages per category (30 topics each; reddit: 100 posts each)")
+                         help="category to crawl, e.g. gameplay (repeatable; default: the main ones)")
+    p_fetch.add_argument("--max-pages", type=int, help="list pages per category (30 topics each)")
     p_fetch.add_argument("--max-topics", type=int, help="stop after this many new/changed topics")
     p_fetch.add_argument("--limit", type=int, help="raiderio / profiles: max lookups this run")
     p_fetch.add_argument("--workers", type=int, help="raiderio / bnet: lookups to run in parallel (default 1 raiderio, 4 bnet)")
@@ -79,8 +93,9 @@ def main() -> None:
 
     sub.add_parser("people", help="rebuild people / player_seasons (one row per person) and summarize")
 
-    p_rdel = sub.add_parser("reddit-deletions", help="blank Reddit posts and comments deleted or removed on Reddit")
-    p_rdel.add_argument("--days", type=int, help="only items from the last N days (default: everything)")
+    for m in local_modules:
+        if hasattr(m, "add_commands"):
+            m.add_commands(sub)
 
     sub.add_parser("stats", help="show row counts")
 
@@ -135,8 +150,8 @@ def main() -> None:
             ]
             for label, query in summaries:
                 print(f"{label}: {conn.execute(query).fetchall()}")
-        elif args.command == "reddit-deletions":
-            reddit.check_deletions(conn, days=args.days)
+        elif any(hasattr(m, "run_command") and m.run_command(conn, args) for m in local_modules):
+            pass
         elif args.command == "stats":
             for table in ("raw_pages", "threads", "posts"):
                 count = db.scalar(conn, pgsql.SQL("SELECT count(*) FROM {}").format(pgsql.Identifier(table)))
