@@ -2,7 +2,7 @@
 
   init-db                         create the database and tables
   fetch blizzard [options]        download forum data into raw_pages
-  fetch raiderio [--limit N] [--workers N]  look up forum posters' characters on Raider.IO
+  fetch raiderio [--limit N] [--workers N] [--alts]  look up forum posters' characters (or their alts) on Raider.IO
   fetch profiles [--limit N]      forum account profiles: every character on the account, About me
   fetch bnet [--limit N] [--workers N]  Blizzard Profile API: PvP, achievements, collections, stats
   fetch reddit [--category SUB]   WoW subreddits: new and changed threads, then parse and deletion check
@@ -51,6 +51,8 @@ def main() -> None:
     p_fetch.add_argument("--workers", type=int, help="raiderio / bnet: lookups to run in parallel (default 1 raiderio, 4 bnet)")
     p_fetch.add_argument("--retry-failed", action="store_true", default=None,
                          help="raiderio / bnet: also retry characters whose lookup failed after all retries before")
+    p_fetch.add_argument("--alts", action="store_true", default=None,
+                         help="raiderio: look up posters' other characters (from forum profiles) instead of the posters")
     p_fetch.add_argument("--refresh-days", type=int,
                          help="raiderio / bnet / profiles: re-fetch characters last fetched more than N days ago (default 30)")
     p_fetch.add_argument("--delay", type=float, help="seconds between requests (default: 1.5 forums and profiles, 1.2 raiderio)")
@@ -98,7 +100,7 @@ def main() -> None:
         if args.command == "fetch":
             options = {k: v for k, v in vars(args).items()
                        if k in ("categories", "max_pages", "max_topics", "limit", "delay", "workers", "retry_failed",
-                                "refresh_days") and v is not None}
+                                "refresh_days", "alts") and v is not None}
             SOURCES[args.source].fetch(conn, **options)
         elif args.command == "parse":
             SOURCES[args.source].parse(conn)
