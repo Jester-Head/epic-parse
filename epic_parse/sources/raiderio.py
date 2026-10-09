@@ -39,6 +39,9 @@ UNKNOWN_REALM = re.compile(r"^Failed to find realm (.+) in region")
 # lists mark as Classic (Raider.IO only covers retail).
 NOT_UNKNOWN_REALM = ("NOT EXISTS (SELECT 1 FROM unknown_realms u WHERE u.region = ch.region AND u.realm = ch.realm)"
                      " AND ch.classic IS NOT TRUE")
+# Lowest current level that can have done Mythic+: Legion's max level 110 is 45 after the
+# Shadowlands level squish, so characters below that never reached a Mythic+ era's max level.
+ALT_MIN_LEVEL = 45
 SINCE = "2016-07-19"  # patch 7.0.3, which added Mythic+ (Raider.IO scores start at Legion 7.2;
                       # it has no percentile cutoffs before Shadowlands S3)
 
@@ -190,8 +193,11 @@ def _apply_profile(conn, char_id: int, raw_id: int, status: int | None, body: di
 
 
 def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float = 1.2, workers: int = 1,
-          retry_failed: bool = False, **_) -> None:
+          retry_failed: bool = False, alts: bool = False, **_) -> None:
     """Look up characters that posted in retail forums since SINCE, newest posters first.
+
+    With `alts`, look up instead the other characters on posters' accounts (forum profiles and
+    self-reported), level ALT_MIN_LEVEL and up, highest level first.
 
     Characters looked up within `refresh_days` are skipped. `limit` caps lookups per run.
     `workers` > 1 runs that many lookups in parallel (each with its own connection and
@@ -212,15 +218,28 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                 ON CONFLICT DO NOTHING""",
             {"region": REGION, "since": SINCE},
         )
-        todo = conn.execute(
-            f"""SELECT ch.id, ch.realm, ch.name
+        if alts:
+            query = f"""SELECT ch.id, ch.realm, ch.name FROM characters ch
+                WHERE ch.region = %(region)s AND {NOT_UNKNOWN_REALM}
+                  AND EXISTS (SELECT 1 FROM player_characters pc WHERE pc.character_id = ch.id
+                              AND pc.how IN ('account_alias', 'self_reported'))
+                  AND coalesce(ch.level, %(min_level)s) >= %(min_level)s
+                  AND (%(retry)s OR ch.raiderio_failures = 0)
+                  AND (ch.looked_up_at IS NULL OR ch.looked_up_at < now() - make_interval(days => %(days)s))
+                ORDER BY ch.level DESC NULLS LAST, ch.achievement_points DESC NULLS LAST
+                LIMIT %(limit)s"""
+        else:
+            query = f"""SELECT ch.id, ch.realm, ch.name
                 FROM characters ch JOIN candidates c ON c.realm = ch.realm AND lower(c.name) = lower(ch.name)
                 WHERE ch.region = %(region)s AND {NOT_UNKNOWN_REALM}
                   AND (%(retry)s OR ch.raiderio_failures = 0)
                   AND (ch.looked_up_at IS NULL OR ch.looked_up_at < now() - make_interval(days => %(days)s))
                 ORDER BY c.last_post DESC
-                LIMIT %(limit)s""",
-            {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit, "retry": retry_failed},
+                LIMIT %(limit)s"""
+        todo = conn.execute(
+            query,
+            {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit, "retry": retry_failed,
+             "min_level": ALT_MIN_LEVEL},
         ).fetchall()
     finally:
         fetcher.close()
