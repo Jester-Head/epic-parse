@@ -5,6 +5,7 @@
 # - Connection settings and password come from the project's .env file.
 # - Writes a compressed dump to $BackupDir, checks it can be read, and keeps the newest $Keep.
 # - Copies the newest dump to $OffsiteDir (a OneDrive folder) so a copy exists off this PC.
+# - Zips epic_parse\local (code kept out of git) to both places as local_code_latest.zip.
 # - Appends to backup.log in $BackupDir. Exits non-zero on failure.
 #
 # Restore with:
@@ -35,6 +36,18 @@ try {
         if ($line -match '^\s*(PG[A-Z]+)\s*=\s*(.*)$') { Set-Item "env:$($Matches[1])" $Matches[2].Trim() }
     }
     $db = if ($env:PGDATABASE) { $env:PGDATABASE } else { "epic_parse" }
+
+    # Code kept outside git (epic_parse\local): one rolling zip here and in $OffsiteDir.
+    $localCode = Join-Path $ProjectRoot "epic_parse\local"
+    if (Test-Path $localCode) {
+        $zip = Join-Path $BackupDir "local_code_latest.zip"
+        Get-ChildItem $localCode -Exclude "__pycache__" | Compress-Archive -DestinationPath $zip -Force
+        if ($OffsiteDir) {
+            New-Item -ItemType Directory -Force $OffsiteDir | Out-Null
+            Copy-Item $zip (Join-Path $OffsiteDir "local_code_latest.zip") -Force
+        }
+        Write-Log "Backed up local-only code to $zip"
+    }
 
     $stamp = Get-Date -Format "yyyy-MM-dd_HHmm"
     $final = Join-Path $BackupDir "${db}_$stamp.dump"

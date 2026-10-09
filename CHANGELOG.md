@@ -54,6 +54,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `fetch raiderio --alts` looks up the other characters on posters' accounts (forum profiles and
   self-reported) at level 45 and up, highest level first.
 - `epic_parse/local/`: modules there (not part of the repository) can add sources and commands.
+- The weekly backup also zips `epic_parse/local/` (local_code_latest.zip, next to the dumps and in OneDrive).
 - `--log FILE` sends all output (logging, prints, tracebacks) to a file, so scheduled runs can use
   `pythonw` and open no console window. Log timestamps include the date in that mode.
 - Lookups that still fail after all retries are skipped by later runs instead of retried every time
