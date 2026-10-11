@@ -20,7 +20,7 @@ SOURCE = "blizzard_forums"
 BASE = "https://us.forums.blizzard.com/en/wow"
 
 # Top-level categories crawled when none are given (their subcategories are included).
-DEFAULT_CATEGORIES = ["gameplay", "classes", "pvp", "lore", "in-development", "community", "wow-classic"]
+DEFAULT_CATEGORIES = ["gameplay", "classes", "pvp", "lore", "in-development", "community", "wow-classic", "wow-forever"]
 
 # Skipped wherever they appear, as a category or a subcategory (along with their
 # subcategories). All realm forums, retail and Classic, are skipped too; see _is_realm().
@@ -31,6 +31,7 @@ DENY_CATEGORY_NAMES = {
     "UI and Macro",
     "WoW Classic New Guild Listings",
     "Classic Connections 2004-2010 - Find People Here",
+    "WoW: Forever Community Connections",
 }
 
 POSTS_PER_REQUEST = 20
