@@ -4,6 +4,7 @@ import importlib
 import logging
 import pkgutil
 import sys
+from datetime import date
 from typing import LiteralString
 
 from psycopg import sql as pgsql
@@ -44,6 +45,8 @@ def main() -> None:
                          help="category to crawl, e.g. gameplay (repeatable; default: the main ones)")
     p_fetch.add_argument("--max-pages", type=int, help="list pages per category (30 topics each)")
     p_fetch.add_argument("--max-topics", type=int, help="stop after this many new/changed topics")
+    p_fetch.add_argument("--since", metavar="YYYY-MM-DD", type=date.fromisoformat,
+                         help="blizzard: only topics active since this date; each category stops once it reaches older ones")
     p_fetch.add_argument("--limit", type=int, help="raiderio / profiles: max lookups this run")
     p_fetch.add_argument("--workers", type=int, help="raiderio / bnet: lookups to run in parallel (default 1 raiderio, 4 bnet)")
     p_fetch.add_argument("--retry-failed", action="store_true", default=None,
@@ -99,6 +102,8 @@ def main() -> None:
             options = {k: v for k, v in vars(args).items()
                        if k in ("categories", "max_pages", "max_topics", "limit", "delay", "workers", "retry_failed",
                                 "refresh_days", "alts") and v is not None}
+            if args.since:
+                options["since"] = args.since.isoformat()
             SOURCES[args.source].fetch(conn, **options)
         elif args.command == "parse":
             SOURCES[args.source].parse(conn)

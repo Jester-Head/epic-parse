@@ -90,12 +90,17 @@ def _fetch_topic(conn, fetcher: Fetcher, src: int, topic_id: int) -> int:
     return 1 + -(-len(missing) // POSTS_PER_REQUEST)
 
 
+def _last_active(topic: dict) -> str:
+    return topic.get("bumped_at") or topic.get("last_posted_at") or ""
+
+
 def fetch(conn, categories: list[str] | None = None, max_pages: int | None = None,
-          max_topics: int | None = None, delay: float = 1.5, **_) -> None:
+          max_topics: int | None = None, delay: float = 1.5, since: str | None = None, **_) -> None:
     """Crawl the given top-level category slugs (default: DEFAULT_CATEGORIES).
 
     max_pages:  topic-list pages per category (30 topics each), newest activity first
     max_topics: stop after fetching this many new/changed topics in total
+    since:      YYYY-MM-DD; skip topics last active before it and stop the category once a page has no newer ones
     """
     src = source_id(conn, SOURCE)
     fetcher = Fetcher(conn, src, delay=delay)
@@ -122,6 +127,8 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
                 if not topics:
                     break
                 for t in topics:
+                    if since and _last_active(t) < since:
+                        continue
                     if _is_denied(cats, t.get("category_id")) or _already_have(conn, t):
                         continue
                     if max_topics is not None and fetched >= max_topics:
@@ -134,6 +141,11 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
                         continue
                     fetched += 1
                     log.info("[%s p%d] topic %d %r (%d requests)", slug, page, t["id"], (t.get("title") or "")[:60], requests)
+                # Pinned topics stay at the top whatever their age, so only the others mark how far back a page is.
+                unpinned = [t for t in topics if not t.get("pinned")]
+                if since and unpinned and all(_last_active(t) < since for t in unpinned):
+                    log.info("[%s p%d] reached topics last active before %s", slug, page, since)
+                    break
                 if not (data or {}).get("topic_list", {}).get("more_topics_url"):
                     break
                 page += 1
