@@ -1,7 +1,7 @@
 """End-of-season projections of Mythic+ percentile lines (my own; Raider.IO's site projection
 isn't in its public API).
 
-Idea: every line climbs through a season in a broadly similar shape. For each finished season we
+Idea: every line climbs through a season in a broadly similar shape. For each finished season I
 record, day by day, the line's value as a share of its final value (mplus_line_progress). A running
 season's final is then projected as today's value / the median share other seasons had reached by
 the same day (SQL: mplus_cutoff_projection). Ratios don't depend on score scale, so seasons with
