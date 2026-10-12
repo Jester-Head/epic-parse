@@ -26,6 +26,7 @@ DENY_CATEGORY_NAMES = {
     "WoW Classic New Guild Listings",
     "Classic Connections 2004-2010 - Find People Here",
     "WoW: Forever Community Connections",
+    "World's End Tavern: Role-play and Fan Fiction",
 }
 
 POSTS_PER_REQUEST = 20
