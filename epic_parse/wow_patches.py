@@ -1,16 +1,6 @@
-"""Tag posts with the WoW game version, expansion and patch that were live when they were written.
+"""Tag posts with the game version, expansion and patch that were live when they were written.
 
-game_version: 'retail', 'classic' or 'forever', from the thread's forum category.
-expansion:    retail: the expansion of the patch below (pre-patch weeks count as the new
-              expansion, since its systems are already live); classic: the Classic flavor
-              named by the forum (e.g. 'Season of Discovery'), or for the renamed progression
-              forum the Classic expansion live at the time (by launch date); else 'Classic'.
-patch:        retail only: the latest patch released on or before the post date.
-
-Tagging runs in SQL so it is the same for freshly parsed posts (blizzard_forums.parse)
-and for backfills (`python -m epic_parse tag-patches`).
-
-To add a patch: append it to RETAIL_PATCHES. A new expansion also needs EXPANSIONS.
+To add a patch, append it to RETAIL_PATCHES. A new expansion also needs EXPANSIONS.
 """
 import logging
 
@@ -18,8 +8,7 @@ from epic_parse.db import bulk_mode, source_id
 
 log = logging.getLogger(__name__)
 
-# North American release dates, checked against each patch's page on warcraft.wiki.gg
-# (Patch_X.Y.Z, "Release date"). Minor x.y.5/x.y.7 patches are listed from 8.1.5 on.
+# US release dates. Minor x.y.5/x.y.7 patches are listed from 8.1.5 on.
 RETAIL_PATCHES = [
     ("3.3.0", "2009-12-08"),
     ("4.0.1", "2010-10-12"), ("4.1.0", "2011-04-26"), ("4.2.0", "2011-06-28"), ("4.3.0", "2011-11-29"),
@@ -47,10 +36,8 @@ EXPANSIONS = {
     12: "Midnight",
 }
 
-# "Mists of Pandaria Classic Discussion" is one forum that Blizzard renamed with each
-# Classic progression expansion (Burning Crusade -> Wrath -> Cataclysm -> Mists), so its
-# posts are tagged by date instead of by name. Launch dates (US); posts before the first
-# launch were pre-launch TBC Classic discussion.
+# Blizzard renamed this forum for each Classic progression expansion, so its posts are tagged by
+# US launch date instead of by name.
 PROGRESSION_FORUM = "mists of pandaria classic discussion"
 CLASSIC_PROGRESSION = [
     ("2021-06-01", "The Burning Crusade Classic"),
@@ -59,7 +46,7 @@ CLASSIC_PROGRESSION = [
     ("2025-07-21", "Mists of Pandaria Classic"),
 ]
 
-# Other Classic forums: flavor by keyword in the forum name (checked in order, lowercase).
+# Checked in order against the lowercase forum name.
 CLASSIC_FLAVORS = [
     ("season of discovery", "Season of Discovery"),
     ("hardcore", "Hardcore"),
@@ -71,6 +58,8 @@ CLASSIC_FLAVORS = [
     ("mists of pandaria", "Mists of Pandaria Classic"),
     ("mop", "Mists of Pandaria Classic"),
 ]
+
+BULK_THRESHOLD = 50_000
 
 
 def tag_posts(conn, source: str = "blizzard_forums", overwrite: bool = False) -> int:
@@ -142,5 +131,3 @@ def tag_posts(conn, source: str = "blizzard_forums", overwrite: bool = False) ->
     log.info("Tagged %s %s posts with game version / expansion / patch", f"{tagged:,}", source)
     return tagged
 
-
-BULK_THRESHOLD = 50_000

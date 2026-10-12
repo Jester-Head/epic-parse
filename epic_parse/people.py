@@ -1,27 +1,11 @@
-"""One row per person: forum accounts (and self-reported players) joined across their characters.
-
-Raider.IO, the Blizzard API and the forums all describe *characters*; one person can have many
-(alts). This rebuilds two tables from everything collected so far:
-
-player_seasons  one row per person per Mythic+ season: their best retail character's score,
-                percentile and tier (mplus_tier), plus how many of their characters had a score.
-people          one row per person: forum activity, characters, Mythic+ history and current
-                season, PvP and collections (account-wide values take the max over characters).
-
-Rebuild after the collection jobs have added data: `python -m epic_parse people`.
-Characters come from player_characters: posted as (forum_alias), listed on the forum profile
-(account_alias) and self-reported. Classic characters are left out of the Mythic+ and Blizzard
-columns (both cover retail only) but counted in `classic_characters`.
-"""
+"""Rebuild people and player_seasons: one row per person, joined across their characters."""
 import logging
 
 log = logging.getLogger(__name__)
 
-TIER_ORDER = ["casual", "mid1", "mid2", "hardcore"]  # 'none' and NULL rank below casual
+TIER_ORDER = ["casual", "mid1", "mid2", "hardcore"]
 MILESTONE_ORDER = ["Keystone Explorer", "Keystone Conqueror", "Keystone Master", "Keystone Hero",
                    "Keystone Legend", "Keystone Myth"]
-# people.peak_tier also uses 'none' (looked up, no Mythic+ score), 'no_pct_data' (scores only in
-# Legion-Shadowlands S2, which have no percentile data) and NULL (not looked up on Raider.IO yet).
 
 
 def refresh(conn) -> tuple[int, int]:
@@ -30,7 +14,7 @@ def refresh(conn) -> tuple[int, int]:
         conn.execute("DELETE FROM player_seasons")
         seasons = conn.execute(
             """
-            WITH cs AS (   -- every (person, retail character, season) with a score
+            WITH cs AS (
                 SELECT pc.player_id, ch.id AS character_id, ch.name || '-' || ch.realm AS character,
                        ch.class, e.key AS season, e.value::numeric AS score
                 FROM player_characters pc
@@ -41,13 +25,13 @@ def refresh(conn) -> tuple[int, int]:
                 SELECT DISTINCT ON (player_id, season) * FROM cs ORDER BY player_id, season, score DESC
             ), alts AS (
                 SELECT player_id, season, count(DISTINCT character_id) AS n FROM cs GROUP BY 1, 2
-            ), ms AS (       -- earliest date each person (any of their characters' accounts) reached each milestone
+            ), ms AS (
                 SELECT player_id, season, jsonb_object_agg(milestone, at) AS dates
                 FROM (SELECT pc.player_id, cm.season, cm.milestone, min(cm.achieved_at) AS at
                       FROM player_characters pc JOIN character_milestones cm ON cm.character_id = pc.character_id
                       WHERE cm.season IS NOT NULL GROUP BY 1, 2, 3) x
                 GROUP BY 1, 2
-            ), runs AS (     -- latest best-run completion seen for each person and season
+            ), runs AS (
                 SELECT pc.player_id, br.season, max(br.completed_at) AS last_at
                 FROM player_characters pc JOIN character_best_runs br ON br.character_id = pc.character_id
                 GROUP BY 1, 2
@@ -63,7 +47,7 @@ def refresh(conn) -> tuple[int, int]:
             LEFT JOIN ms USING (player_id, season)
             LEFT JOIN runs USING (player_id, season)
             CROSS JOIN LATERAL (SELECT mplus_milestones(b.season, b.score) AS ms) m
-            CROSS JOIN LATERAL (SELECT mplus_percentile(b.season, b.score) AS pct) pt  -- computed once per row
+            CROSS JOIN LATERAL (SELECT mplus_percentile(b.season, b.score) AS pct) pt
             """
         ).rowcount
 
@@ -72,7 +56,7 @@ def refresh(conn) -> tuple[int, int]:
             """
             WITH cur AS (
                 SELECT slug FROM mplus_seasons WHERE starts <= now() AND ends > now() ORDER BY starts DESC LIMIT 1
-            ), shared_ids AS (  -- characters linked to more than one account
+            ), shared_ids AS (
                 SELECT character_id FROM player_characters GROUP BY 1 HAVING count(DISTINCT player_id) > 1
             ), chars AS (
                 SELECT pc.player_id, ch.*, si.character_id IS NOT NULL AS shared
@@ -85,7 +69,7 @@ def refresh(conn) -> tuple[int, int]:
                        count(*) FILTER (WHERE found) AS found,
                        count(*) FILTER (WHERE shared) AS shared
                 FROM chars GROUP BY 1
-            ), fallback_main AS (   -- for people without Mythic+: highest level, then achievements
+            ), fallback_main AS (
                 SELECT DISTINCT ON (player_id) player_id, name || '-' || realm AS character, class
                 FROM chars WHERE classic IS NOT TRUE
                 ORDER BY player_id, level DESC NULLS LAST, achievement_points DESC NULLS LAST
@@ -106,7 +90,7 @@ def refresh(conn) -> tuple[int, int]:
                 FROM ps GROUP BY 1
             ), cur_season AS (
                 SELECT ps.player_id, ps.score, ps.pct, ps.tier, ps.milestone FROM ps JOIN cur ON cur.slug = ps.season
-            ), posts_by AS (   -- forum activity (crawled posts carry the account name as author)
+            ), posts_by AS (
                 SELECT author, count(*) AS n, min(created_at) AS first_post, max(created_at) AS last_post,
                        avg((extra->>'game_version' = 'retail')::int) AS retail_share
                 FROM posts
@@ -117,7 +101,7 @@ def refresh(conn) -> tuple[int, int]:
                 FROM posts p JOIN threads t ON t.id = p.thread_id
                 WHERE p.source_id = (SELECT id FROM sources WHERE name = 'blizzard_forums') AND NOT p.extra ? 'v1_import'
                 GROUP BY p.author, t.category ORDER BY p.author, count(*) DESC
-            ), pvp AS (     -- best rating in the latest PvP season seen
+            ), pvp AS (
                 SELECT DISTINCT ON (c.player_id) c.player_id, (e.value->>'rating')::int AS rating, e.key AS bracket
                 FROM chars c JOIN bnet_characters b ON b.character_id = c.id
                 CROSS JOIN LATERAL jsonb_each(b.pvp) e
@@ -145,7 +129,7 @@ def refresh(conn) -> tuple[int, int]:
                    coalesce(m.main_character, fm.character), coalesce(m.main_class, fm.class),
                    coalesce(m.seasons, 0), m.first_season, m.last_season, m.best_pct, m.best_pct_season,
                    CASE WHEN m.peak_tier IS NOT NULL THEN m.peak_tier
-                        WHEN coalesce(m.seasons, 0) > 0 THEN 'no_pct_data'  -- scores only in seasons without percentiles
+                        WHEN coalesce(m.seasons, 0) > 0 THEN 'no_pct_data'
                         WHEN cs.found > 0 THEN 'none' END,
                    cu.score, cu.pct, cu.tier, pv.rating, pv.bracket,
                    bn.honor_level, bn.ap, bn.mounts, bn.pets, bn.toys, bn.last_login,

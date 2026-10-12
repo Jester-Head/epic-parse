@@ -31,13 +31,11 @@ function Write-Log($msg) {
 }
 
 try {
-    # Load PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE from .env (pg_dump reads them from the environment).
     foreach ($line in Get-Content (Join-Path $ProjectRoot ".env")) {
         if ($line -match '^\s*(PG[A-Z]+)\s*=\s*(.*)$') { Set-Item "env:$($Matches[1])" $Matches[2].Trim() }
     }
     $db = if ($env:PGDATABASE) { $env:PGDATABASE } else { "epic_parse" }
 
-    # Code kept outside git (epic_parse\local): one rolling zip here and in $OffsiteDir.
     $localCode = Join-Path $ProjectRoot "epic_parse\local"
     if (Test-Path $localCode) {
         $zip = Join-Path $BackupDir "local_code_latest.zip"
@@ -66,11 +64,9 @@ try {
     $sizeGB = (Get-Item $final).Length / 1GB
     Write-Log ("Backup OK: {0:N2} GB in {1:N0} min" -f $sizeGB, $sw.Elapsed.TotalMinutes)
 
-    # Keep only the newest $Keep dumps locally.
     Get-ChildItem $BackupDir -Filter "${db}_*.dump" | Sort-Object Name -Descending | Select-Object -Skip $Keep |
         ForEach-Object { Remove-Item $_.FullName; Write-Log "Removed old backup $($_.Name)" }
 
-    # One rolling copy off this PC.
     if ($OffsiteDir) {
         New-Item -ItemType Directory -Force $OffsiteDir | Out-Null
         $offsite = Join-Path $OffsiteDir "${db}_latest.dump"

@@ -1,9 +1,4 @@
-"""Postgres connection helpers.
-
-Connection settings come from the standard libpq environment variables
-(PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE), loaded from a `.env` file
-in the project root. Copy `.env.example` to `.env` and fill in your password.
-"""
+"""Postgres connection helpers. Settings come from the PG* variables in `.env`."""
 import logging
 import os
 from contextlib import contextmanager
@@ -22,9 +17,8 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 log = logging.getLogger(__name__)
 
-# The GIN search indexes on posts (same definitions as db/schema.sql). Updating them row
-# by row during a multi-million-row insert/update is extremely slow, so bulk operations
-# drop them and rebuild them once at the end.
+# Same definitions as db/schema.sql. Bulk operations drop and rebuild them, because updating
+# them row by row is very slow.
 SEARCH_INDEXES: dict[str, LiteralString] = {
     "posts_body_search": "CREATE INDEX posts_body_search ON posts USING gin (body_tsv)",
     "posts_extra": "CREATE INDEX posts_extra ON posts USING gin (extra jsonb_path_ops)",
@@ -48,14 +42,12 @@ def connect(dbname: str | None = None) -> psycopg.Connection:
 def init_db() -> None:
     """Create the database if it doesn't exist, then apply schema.sql."""
     name = database_name()
-    # CREATE DATABASE can't run inside a transaction, hence autocommit.
     with psycopg.connect(dbname="postgres", autocommit=True) as conn:
         exists = conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone()
         if not exists:
             conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
             print(f"Created database {name!r}")
     with connect() as conn:
-        # Our own schema file, so it's safe to run as-is (psycopg wants literal SQL by default).
         conn.execute(cast(LiteralString, SCHEMA_FILE.read_text(encoding="utf-8")))
     print(f"Schema applied to {name!r}")
 

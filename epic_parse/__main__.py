@@ -1,21 +1,4 @@
-"""Command line entry point: `python -m epic_parse <command>`.
-
-  init-db                         create the database and tables
-  fetch blizzard [options]        download forum data into raw_pages
-  fetch raiderio [--limit N] [--workers N] [--alts]  look up forum posters' characters (or their alts) on Raider.IO
-  fetch profiles [--limit N]      forum account profiles: every character on the account, About me
-  fetch bnet [--limit N] [--workers N]  Blizzard Profile API: PvP, achievements, collections, stats
-  snapshot [--limit N]            weekly Raider.IO snapshot of tracked characters (first deletes expired Blizzard data)
-  parse blizzard|raiderio         turn raw pages into rows
-  import-v1 KIND PATH              load a data file from the v1 project (see importers/v1_archive.py)
-  tag-patches [--overwrite]       tag forum posts with game version / expansion / patch
-  projection [--season S] [--backtest]  projected end-of-season Mythic+ cutoffs
-  milestones                      map keystone achievements; backfill milestone dates and best runs
-  people                          rebuild the one-row-per-person tables and summarize them
-  stats                           row counts per table
-
-Modules in epic_parse/local/ (kept out of the repository) can add sources and commands; see load_local().
-"""
+"""Command line entry point: `python -m epic_parse <command>` (see --help)."""
 import argparse
 import importlib
 import logging
@@ -26,7 +9,6 @@ from typing import LiteralString
 from psycopg import sql as pgsql
 
 from epic_parse import db, milestones, people, projection, wow_patches
-from epic_parse.sources.blizzard_api import Token
 from epic_parse.importers import v1_archive
 from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio
 
@@ -34,8 +16,9 @@ SOURCES = {"blizzard": blizzard_forums, "bnet": blizzard_api, "profiles": forum_
 
 
 def load_local() -> list:
-    """Modules in epic_parse/local/. One with CLI_NAME becomes a `fetch`/`parse` source; one with
-    add_commands(subparsers) and run_command(conn, args) -> bool adds its own commands."""
+    """Modules in epic_parse/local/ (kept out of the repository). One with CLI_NAME becomes a
+    `fetch`/`parse` source. One with add_commands(subparsers) and run_command(conn, args) -> bool
+    adds its own commands."""
     try:
         local = importlib.import_module("epic_parse.local")
     except ImportError:
@@ -100,7 +83,7 @@ def main() -> None:
     sub.add_parser("stats", help="show row counts")
 
     args = parser.parse_args()
-    if args.log:  # pythonw has no console, so send everything, tracebacks included, to the file
+    if args.log:
         sys.stdout = sys.stderr = open(args.log, "a", encoding="utf-8", buffering=1)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, stream=sys.stderr,
                         format="%(asctime)s %(levelname)-7s %(message)s",
@@ -140,7 +123,7 @@ def main() -> None:
                 for pct, week, n, med, worst, inside in projection.backtest(conn):
                     print(f"  top {100 - float(pct):<5g}{week:>5}{n:>9}{med:>11}%{worst:>10}%{inside:>9}%")
         elif args.command == "milestones":
-            milestones.backfill(conn, Token())
+            milestones.backfill(conn, blizzard_api.Token())
         elif args.command == "people":
             people.refresh(conn)
             summaries: list[tuple[str, LiteralString]] = [

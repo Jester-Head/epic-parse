@@ -1,16 +1,7 @@
-"""End-of-season projections of Mythic+ percentile lines (my own; Raider.IO's site projection
-isn't in its public API).
+"""End-of-season projections of Mythic+ percentile lines.
 
-Idea: every line climbs through a season in a broadly similar shape. For each finished season I
-record, day by day, the line's value as a share of its final value (mplus_line_progress). A running
-season's final is then projected as today's value / the median share other seasons had reached by
-the same day (SQL: mplus_cutoff_projection). Ratios don't depend on score scale, so seasons with
-key-level squishes or scoring changes still compare. Season length is the main unknown: short
-seasons settle earlier, and a running season's end date is often not published yet.
-
-refresh():  rebuild mplus_line_progress from the cutoff history (runs after each cutoff refresh).
-backtest(): leave-one-out check on finished seasons: projection error by week of season.
-report():   current projections for a season.
+A running season's final value is projected as today's value divided by the median share of
+their final value that finished seasons had reached by the same day.
 """
 import logging
 
@@ -18,7 +9,6 @@ log = logging.getLogger(__name__)
 
 PERCENTILES = [99.9, 99.0, 95.0, 90.0, 75.0, 60.0]
 
-# Seasons left out of the model because their history is unreliable.
 EXCLUDED = {
     "season-df-1": "Raider.IO's archive counts only ~45k players; projections from it were 18-30% off at week 4",
 }
@@ -35,7 +25,7 @@ def refresh(conn) -> int:
                 FROM mplus_seasons s
                 WHERE s.ends < now() AND s.slug <> ALL(%(excluded)s::text[])
                   AND EXISTS (SELECT 1 FROM mplus_cutoff_history h WHERE h.season = s.slug)
-            ), daily AS (   -- each line's value as of the end of each day
+            ), daily AS (   -- as of the end of each day
                 SELECT s.slug AS season, p.pct AS percentile, d.day,
                        mplus_score_at(s.slug, 100 - p.pct, (s.starts + d.day + 1)::timestamptz) AS value
                 FROM seasons s
@@ -87,8 +77,11 @@ def backtest(conn, weeks=(2, 4, 6, 8, 10, 12, 16)) -> list[tuple]:
 
 
 def report(conn, season: str | None = None) -> tuple[str, list[tuple]]:
-    season = season or conn.execute(
-        "SELECT slug FROM mplus_seasons WHERE starts <= now() ORDER BY starts DESC LIMIT 1").fetchone()[0]
+    if season is None:
+        row = conn.execute("SELECT slug FROM mplus_seasons WHERE starts <= now() ORDER BY starts DESC LIMIT 1").fetchone()
+        if row is None:
+            raise LookupError("No Mythic+ seasons stored yet. Run `fetch raiderio` first.")
+        season = str(row[0])
     return season, conn.execute(
         """SELECT pct, p.day, p.current_score, p.projected, p.low, p.high, p.seasons_used
            FROM unnest(%(pcts)s::numeric[]) AS pct, LATERAL mplus_cutoff_projection(%(season)s, pct, now()) p

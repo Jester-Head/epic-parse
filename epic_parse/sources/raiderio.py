@@ -1,15 +1,4 @@
-"""Raider.IO (raider.io): Mythic+ scores and raid progress for characters that posted.
-
-API terms (raider.io/api): community and personal use; anything public built on this data
-must link to raider.io; no reselling. Requests without a key are rate limited (HTTP 429 with
-Retry-After, which the Fetcher honours). A free app key from raider.io/settings/apps raises
-the limit: put it in .env as RAIDERIO_KEY.
-
-fetch(): season list and percentile cutoffs, then one profile lookup per character that
-         posted in a retail forum (newest posters first). Every response goes to raw_pages.
-parse(): re-applies the latest raw profile of each character to the characters table
-         (fetch already does this as it goes; parse is for re-processing).
-"""
+"""Raider.IO: Mythic+ scores, raid progress and weekly snapshots for characters that posted."""
 import json
 import logging
 import os
@@ -26,27 +15,16 @@ log = logging.getLogger(__name__)
 SOURCE = "raiderio"
 BASE = "https://raider.io/api/v1"
 REGION = "us"
-EXPANSIONS = [6, 7, 8, 9, 10, 11]  # Legion (where Mythic+ began) through Midnight
-MAIN_SEASON = re.compile(r"^season-((bfa|sl|df|tww|mn)-\d+|7\.\d+(\.\d+)?)$")  # Legion slugs are patch numbers
-# ("season-7.3.2"); skips event and post-season variants like '-break-the-meta', 'season-post-legion'
+EXPANSIONS = [6, 7, 8, 9, 10, 11]  # Legion through Midnight
+MAIN_SEASON = re.compile(r"^season-((bfa|sl|df|tww|mn)-\d+|7\.\d+(\.\d+)?)$")
 PERCENTILES = {"p999": 99.9, "p990": 99.0, "p900": 90.0, "p750": 75.0, "p600": 60.0}
-# Lines Raider.IO doesn't publish, interpolated from the season's curve (mplus_score_at).
-# Top 5% is a Blizzard reward tier from Midnight Season 3 (ranked per spec from then on;
-# these lines are for all players).
 DERIVED_PERCENTILES = [95.0]
 UNKNOWN_REALM = re.compile(r"^Failed to find realm (.+) in region")
-# Skipped: characters on realms Raider.IO said don't exist, and characters the forum alias
-# lists mark as Classic (Raider.IO only covers retail).
-NOT_UNKNOWN_REALM = ("NOT EXISTS (SELECT 1 FROM unknown_realms u WHERE u.region = ch.region AND u.realm = ch.realm)"
-                     " AND ch.classic IS NOT TRUE")
-# Lowest current level that can have done Mythic+: Legion's max level 110 is 45 after the
-# Shadowlands level squish, so characters below that never reached a Mythic+ era's max level.
-ALT_MIN_LEVEL = 45
-SINCE = "2016-07-19"  # patch 7.0.3, which added Mythic+ (Raider.IO scores start at Legion 7.2;
-                      # it has no percentile cutoffs before Shadowlands S3)
+LOOKUP_ELIGIBLE = ("NOT EXISTS (SELECT 1 FROM unknown_realms u WHERE u.region = ch.region AND u.realm = ch.realm)"
+                   " AND ch.classic IS NOT TRUE")
+ALT_MIN_LEVEL = 45  # Legion's max level (110) after the Shadowlands level squish
+SINCE = "2016-07-19"  # patch 7.0.3, which added Mythic+
 
-# Characters behind retail forum posts. Crawled posts store the posting character as
-# 'Name-realm' in extra.character; v1-imported usernames are 'Name-realm' themselves.
 CANDIDATES_SQL = """
     SELECT realm_slug(extra->>'realm') AS realm,
            split_part(coalesce(extra->>'character', author), '-', 1) AS name,
@@ -69,6 +47,7 @@ def load_candidates(conn) -> int:
     conn.execute("ANALYZE candidates")
     return n
 
+
 def _params(**params):
     key = os.environ.get("RAIDERIO_KEY")
     return {**params, "access_key": key} if key else params
@@ -86,8 +65,6 @@ def _fetch_seasons(conn, fetcher: Fetcher) -> list[str]:
                     (s["slug"], s.get("name"), exp, (s.get("starts") or {}).get(REGION), (s.get("ends") or {}).get(REGION)),
                 )
     seasons = [r[0] for r in conn.execute("SELECT slug FROM mplus_seasons ORDER BY starts")]
-    # Cutoffs: refresh seasons that are still running or that we don't have yet.
-    # Seasons Raider.IO has no cutoffs for (has_cutoffs = false) aren't asked again.
     for slug in conn.execute(
         "SELECT slug FROM mplus_seasons s WHERE ends > now() "
         "OR (has_cutoffs IS DISTINCT FROM false AND ("
@@ -210,17 +187,10 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
         seasons = _fetch_seasons(conn, fetcher)
         fields = "mythic_plus_scores_by_season:" + ":".join(seasons) + \
                  ",raid_progression:current-expansion:previous-expansion,mythic_plus_best_runs:all"
-        season_now = current_season(conn)  # best runs are for the running season
-        load_candidates(conn)
-        conn.execute(
-            f"""INSERT INTO characters (region, realm, name)
-                SELECT %(region)s, realm, name FROM candidates c WHERE name <> '' AND realm <> ''
-                ON CONFLICT DO NOTHING""",
-            {"region": REGION, "since": SINCE},
-        )
+        season_now = current_season(conn)
         if alts:
             query = f"""SELECT ch.id, ch.realm, ch.name FROM characters ch
-                WHERE ch.region = %(region)s AND {NOT_UNKNOWN_REALM}
+                WHERE ch.region = %(region)s AND {LOOKUP_ELIGIBLE}
                   AND EXISTS (SELECT 1 FROM player_characters pc WHERE pc.character_id = ch.id
                               AND pc.how IN ('account_alias', 'self_reported'))
                   AND coalesce(ch.level, %(min_level)s) >= %(min_level)s
@@ -229,16 +199,23 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                 ORDER BY ch.level DESC NULLS LAST, ch.achievement_points DESC NULLS LAST
                 LIMIT %(limit)s"""
         else:
+            load_candidates(conn)
+            conn.execute(
+                """INSERT INTO characters (region, realm, name)
+                   SELECT %(region)s, realm, name FROM candidates c WHERE name <> '' AND realm <> ''
+                   ON CONFLICT DO NOTHING""",
+                {"region": REGION},
+            )
             query = f"""SELECT ch.id, ch.realm, ch.name
                 FROM characters ch JOIN candidates c ON c.realm = ch.realm AND lower(c.name) = lower(ch.name)
-                WHERE ch.region = %(region)s AND {NOT_UNKNOWN_REALM}
+                WHERE ch.region = %(region)s AND {LOOKUP_ELIGIBLE}
                   AND (%(retry)s OR ch.raiderio_failures = 0)
                   AND (ch.looked_up_at IS NULL OR ch.looked_up_at < now() - make_interval(days => %(days)s))
                 ORDER BY c.last_post DESC
                 LIMIT %(limit)s"""
         todo = conn.execute(
             query,
-            {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit, "retry": retry_failed,
+            {"region": REGION, "days": refresh_days, "limit": limit, "retry": retry_failed,
              "min_level": ALT_MIN_LEVEL},
         ).fetchall()
     finally:
@@ -261,7 +238,7 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                         ok = _apply_profile(wconn, char_id, raw_id, status, body)
                         if ok:
                             milestones.store_best_runs(wconn, char_id, season_now, body)
-                    except Exception as e:  # one bad character shouldn't stop the run
+                    except Exception as e:
                         log.warning("Lookup failed for %s-%s, skipped from now on (--retry-failed): %s", name, realm, e)
                         wconn.execute("UPDATE characters SET raiderio_failures = raiderio_failures + 1 WHERE id = %s", (char_id,))
                         ok, failed = False, True
@@ -372,26 +349,26 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
     src = source_id(conn, SOURCE)
     fetcher = Fetcher(conn, src, delay=delay)
     try:
-        _fetch_seasons(conn, fetcher)  # also refreshes the current season's cutoffs and history
+        _fetch_seasons(conn, fetcher)
         season = current_season(conn)
         if season is None:
             log.warning("No running Mythic+ season on Raider.IO; skipping the snapshot")
             return
         link_forum_players(conn)
         targets = conn.execute(
-            f"""WITH season_posters AS (  -- distinct characters that posted this season (one pass over posts)
+            f"""WITH season_posters AS (
                    SELECT DISTINCT realm_slug(extra->>'realm') AS realm,
                           lower(split_part(coalesce(extra->>'character', author), '-', 1)) AS lname
                    FROM posts
                    WHERE extra->>'game_version' = 'retail' AND extra ? 'realm'
                      AND created_at >= (SELECT starts FROM mplus_seasons WHERE slug = %(season)s)
-               ), named AS (  -- characters people told us about, or that belong to gold-labelled players
+               ), named AS (
                    SELECT pc.character_id FROM player_characters pc JOIN players pl ON pl.id = pc.player_id
                    WHERE pc.how = 'self_reported' OR pl.key LIKE 'gold:%%'
                )
                SELECT ch.id, ch.realm, ch.name FROM characters ch
                LEFT JOIN season_posters sp ON sp.realm = ch.realm AND sp.lname = lower(ch.name)
-               WHERE ch.region = %(region)s AND ch.found IS DISTINCT FROM false AND {NOT_UNKNOWN_REALM}
+               WHERE ch.region = %(region)s AND ch.found IS DISTINCT FROM false AND {LOOKUP_ELIGIBLE}
                  AND ch.raiderio_failures = 0
                  AND NOT EXISTS (SELECT 1 FROM character_snapshots s
                                  WHERE s.character_id = ch.id AND s.taken_at > now() - interval '5 days')
@@ -410,7 +387,7 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                     params=_params(region=REGION, realm=realm, name=name,
                                    fields=f"mythic_plus_scores_by_season:{season},gear,mythic_plus_best_runs:all"),
                 )
-            except Exception as e:  # one bad character shouldn't stop the weekly snapshot
+            except Exception as e:
                 log.warning("Snapshot failed for %s-%s, skipped from now on (fetch --retry-failed): %s", name, realm, e)
                 conn.execute("UPDATE characters SET raiderio_failures = raiderio_failures + 1 WHERE id = %s", (char_id,))
                 continue
@@ -433,4 +410,4 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
         log.info("Done: %d snapshots taken", taken)
     finally:
         fetcher.close()
-    people.refresh(conn)  # keep the one-row-per-person tables current every week
+    people.refresh(conn)

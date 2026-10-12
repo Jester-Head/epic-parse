@@ -11,19 +11,15 @@
  * Structure, scales and codebook: docs/survey/pilot-survey.md
  */
 const CONTACT = 'epicparse.research@gmail.com';
-const FORM_ID = '1BIzxcvAv9efqVwX-XY-mfw3M57CdYhpWsQ-u02l5pSU';  // the pilot form created on 2026-10-05
+const FORM_ID = '1BIzxcvAv9efqVwX-XY-mfw3M57CdYhpWsQ-u02l5pSU';
 const TITLE = 'Your Mythic+ experience (Epic-Parse pilot survey)';
 
-// Standard response scales
 const FREQUENCY = ['Never', 'Rarely', 'Sometimes', 'Often', 'Very often'];
 const AGREEMENT = ['Strongly disagree', 'Disagree', 'Neither agree nor disagree', 'Agree', 'Strongly agree'];
-// Breaks at 1 / 4 / 8 follow the Great Vault's three Mythic+ slots (8 keys fill it); 8–10 separates
-// "about a full vault" from playing well past it.
+// Breaks follow the Great Vault's three Mythic+ slots (1, 4 and 8 keys).
 const KEYS_PER_WEEK = ['None', '1–3', '4–7', '8–10', '11–15', '16+', 'Not sure'];
 
-// Patch periods within each season (US release dates from epic_parse/wow_patches.py;
-// season dates from Raider.IO): [season, [[row label, dates], ...]]. Row labels stay short
-// (grid rows get cut off); the dates go in each grid's help text.
+// [season, [[row label, dates], ...]]. Labels stay short because grid rows get cut off.
 const SEASON_PATCHES = [
   ['The War Within Season 1', [['11.0.2', 'Sep–Oct 2024'], ['11.0.5', 'Oct–Dec 2024'],
     ['11.0.7', 'Dec 2024–Feb 2025']]],
@@ -82,7 +78,6 @@ function build(form) {
   form.setConfirmationMessage(
     'Thank you! If you want to change or remove your answers later, keep your edit link or contact ' + CONTACT + '.');
 
-  // Section 1: Consent
   form.addSectionHeaderItem().setTitle('About this survey').setHelpText(
     '• Taking part is voluntary, and every question except this one is optional.\n' +
     '• There are no right or wrong answers. Every play style is welcome.\n' +
@@ -96,7 +91,6 @@ function build(form) {
   form.addMultipleChoiceItem().setTitle('I have read the information above and agree to take part.')
     .setChoiceValues(['I agree']).setRequired(true);
 
-  // Section 2: How you play (everyone)
   form.addPageBreakItem().setTitle('How you play')
     .setHelpText('Think about the last two years of World of Warcraft.');
   form.addGridItem().setTitle('1. How often do you do each of these activities?')
@@ -106,11 +100,9 @@ function build(form) {
   form.addMultipleChoiceItem().setTitle('2. Which activity matters most to you?')
     .setChoiceValues(ACTIVITIES).showOtherOption(true);
 
-  // Screener: people who don't run Mythic+ skip the Mythic+ sections
   const screener = form.addMultipleChoiceItem()
     .setTitle('3. In the past two years, how often have you run Mythic+ dungeons?');
 
-  // Section 3: Mythic+
   const mplusPage = form.addPageBreakItem().setTitle('Mythic+');
   form.addCheckboxItem().setTitle('4. Which role(s) do you play in Mythic+?')
     .setChoiceValues(['Tank', 'Healer', 'Damage']);
@@ -129,7 +121,6 @@ function build(form) {
     .setChoiceValues(['Group finder (pick-up groups)', 'A regular group', 'Guild', 'Friends', 'A mix of these'])
     .showOtherOption(true);
 
-  // Section 4: Season history
   form.addPageBreakItem().setTitle('Season by season')
     .setHelpText('8. For each patch, roughly how many Mythic+ keys did you run per week? ' +
       'The first patch listed is the start of the season. For reference, 8 keys fill the Great Vault. ' +
@@ -141,7 +132,6 @@ function build(form) {
       .setColumns(KEYS_PER_WEEK);
   });
 
-  // Section 5: Changes during a season
   form.addPageBreakItem().setTitle('Changes during a season');
   form.addCheckboxItem()
     .setTitle('9. Think about times you ran fewer keys later in a season than earlier, or stopped. ' +
@@ -152,7 +142,6 @@ function build(form) {
     .setChoiceValues(REASONS.concat(['Not applicable']))
     .showOtherOption(true);
 
-  // Section 6: Opinions
   form.addPageBreakItem().setTitle('Your views');
   form.addSectionHeaderItem().setTitle('11. How much do you agree or disagree with each statement?');
   // Separate questions rather than a grid: long statements get cut off in grid rows on phones.
@@ -164,7 +153,6 @@ function build(form) {
     form.addMultipleChoiceItem().setTitle(statement[0] + '. ' + statement[1]).setChoiceValues(AGREEMENT);
   });
 
-  // Section 7: In your own words
   form.addPageBreakItem().setTitle('In your own words');
   form.addParagraphTextItem()
     .setTitle('12. Is there a season that stands out to you, good or bad? What made it that way?');
@@ -172,7 +160,6 @@ function build(form) {
   form.addParagraphTextItem()
     .setTitle('14. Anything from earlier seasons (Legion, BfA, Shadowlands, Dragonflight) worth knowing?');
 
-  // Section 8: About you (background questions last)
   const aboutPage = form.addPageBreakItem().setTitle('About you');
   form.addMultipleChoiceItem().setTitle('15. Which region do you mostly play in?')
     .setChoiceValues(['US', 'EU', 'Oceanic', 'KR', 'TW']);
@@ -185,7 +172,6 @@ function build(form) {
     .setTitle('18. May I look up your characters on Raider.IO and link them to your answers?')
     .setChoiceValues(['Yes', 'No']);
 
-  // Section 9: Wrap up
   form.addPageBreakItem().setTitle('Before you finish');
   form.addMultipleChoiceItem().setTitle('19. May I quote your written answers anonymously on my blog?')
     .setChoiceValues(['Yes', 'No']);

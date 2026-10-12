@@ -1,25 +1,7 @@
-"""Blizzard's World of Warcraft Profile API (develop.battle.net) for forum posters' characters.
+"""Blizzard's WoW Profile API: PvP, achievements, collections and stats for forum posters' characters.
 
-Adds what Raider.IO doesn't have: PvP ratings, achievements with the date each was earned,
-collections, lifetime statistics, raid kills with dates, and last login.
-
-Credentials: BLIZZARD_CLIENT_ID and BLIZZARD_CLIENT_SECRET in .env (client-credentials flow;
-a token lasts 24 hours and is refreshed automatically). Limit: 36,000 requests per hour.
-
-Per character: summary (stops here on 404, which Blizzard returns for characters that haven't
-logged in for a long time, are very low level, or were renamed/transferred), PvP summary plus
-each rated bracket, achievements, achievement statistics, mounts, pets, toys, raid encounters.
-Responses go to raw_pages whole, except two that are reduced first because of their size:
-achievements (~2 MB each) keep the totals plus [achievement id, completed timestamp] pairs,
-and mounts/pets/toys keep only their counts.
-
-fetch(): characters that posted in retail forums (same candidates as Raider.IO), newest posters
-         first, skipping those fetched within `refresh_days`. Applied as it goes.
-parse(): re-applies stored responses to bnet_characters.
-purge_expired(): Blizzard's API terms allow keeping its data for at most 30 days. Deletes raw pages,
-         bnet_characters rows and milestone dates older than that, and raw pages replaced by a newer
-         copy. Runs after every fetch and before every weekly snapshot; a scheduled task re-fetches
-         everyone every 4 weeks (`fetch bnet --refresh-days 21`) so nothing reaches 30 days.
+Blizzard's API terms allow keeping its data for at most 30 days. purge_expired() enforces that
+after every fetch and before every weekly snapshot.
 """
 import json
 import logging
@@ -34,7 +16,7 @@ import httpx
 from epic_parse import milestones
 from epic_parse.db import connect, source_id
 from epic_parse.fetch import Fetcher
-from epic_parse.sources.raiderio import NOT_UNKNOWN_REALM, SINCE, load_candidates
+from epic_parse.sources.raiderio import LOOKUP_ELIGIBLE, load_candidates
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +27,8 @@ PROFILE = {"namespace": f"profile-{REGION}", "locale": "en_US"}
 TOKEN_URL = "https://oauth.battle.net/token"
 TOKEN_MAX_AGE = 12 * 3600  # refresh well before the 24 h expiry
 MAX_AGE_DAYS = 30  # Blizzard Developer API terms: keep data no longer than 30 days
+# The character part of a stored Profile API URL. Must match the raw_pages_bnet_character index.
+CHARACTER_KEY = "(regexp_match(url, '/profile/wow/character/[^/?]+/[^/?]+'))[1]"
 
 
 class Token:
@@ -96,7 +80,7 @@ def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name
             milestone_ids: set[int] | None = None) -> bool:
     base = f"/profile/wow/character/{quote(realm)}/{quote(name.lower())}"
     raw_id, summary, status = _get(fetcher, token, base, "bnet_summary")
-    conn.execute("UPDATE characters SET bnet_failures = 0 WHERE id = %s", (char_id,))  # got a real answer
+    conn.execute("UPDATE characters SET bnet_failures = 0 WHERE id = %s", (char_id,))
     if status != 200 or not summary:
         conn.execute(
             """INSERT INTO bnet_characters (character_id, found, fetched_at, raw_page_id) VALUES (%s, false, now(), %s)
@@ -106,8 +90,15 @@ def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name
                    pets = NULL, toys = NULL, fetched_at = now(), raw_page_id = EXCLUDED.raw_page_id""",
             (char_id, raw_id),
         )
-        # the terms require deleting a character's data once Blizzard stops returning it
+        # The terms require deleting a character's data once Blizzard stops returning it. That
+        # includes older responses, or `milestones` would rebuild the dates from them.
         conn.execute("DELETE FROM character_milestones WHERE character_id = %s", (char_id,))
+        conn.execute(
+            f"""DELETE FROM raw_pages
+               WHERE kind LIKE 'bnet%%' AND id <> %(raw)s
+                 AND {CHARACTER_KEY} = (SELECT {CHARACTER_KEY} FROM raw_pages WHERE id = %(raw)s)""",
+            {"raw": raw_id},
+        )
         return False
 
     pvp = {}
@@ -173,12 +164,12 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
         f"""SELECT ch.id, ch.realm, ch.name
             FROM characters ch JOIN candidates c ON c.realm = ch.realm AND lower(c.name) = lower(ch.name)
             LEFT JOIN bnet_characters b ON b.character_id = ch.id
-            WHERE ch.region = %(region)s AND {NOT_UNKNOWN_REALM}
+            WHERE ch.region = %(region)s AND {LOOKUP_ELIGIBLE}
               AND (%(retry)s OR ch.bnet_failures = 0)
               AND (b.fetched_at IS NULL OR b.fetched_at < now() - make_interval(days => %(days)s))
             ORDER BY c.last_post DESC
             LIMIT %(limit)s""",
-        {"region": REGION, "since": SINCE, "days": refresh_days, "limit": limit, "retry": retry_failed},
+        {"region": REGION, "days": refresh_days, "limit": limit, "retry": retry_failed},
     ).fetchall()
     log.info("%d characters to look up on the Blizzard API with %d worker(s)", len(todo), workers)
     token = Token()
@@ -195,7 +186,7 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
                     failed = False
                     try:
                         ok = _lookup(wconn, wfetcher, token, char_id, realm, name, milestone_ids)
-                    except Exception as e:  # one bad character shouldn't stop the run
+                    except Exception as e:
                         log.warning("Blizzard lookup failed for %s-%s, skipped from now on (--retry-failed): %s",
                                     name, realm, e)
                         wconn.execute("UPDATE characters SET bnet_failures = bnet_failures + 1 WHERE id = %s", (char_id,))

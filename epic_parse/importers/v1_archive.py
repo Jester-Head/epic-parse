@@ -1,18 +1,6 @@
-"""Importers for data collected by the v1 project (git tag v1-archive).
+"""Import data files from the v1 project (git tag v1-archive).
 
-Each file is streamed into raw_pages inside one transaction (all-or-nothing) and
-recorded in `imports`, so the same file is never loaded twice. The new raw rows are
-then turned into threads/posts with set-based SQL, which is far faster than
-row-by-row Python at millions of rows.
-
-Imported rows are marked with extra->'v1_import' = true. A live crawl that later
-fetches the same post overwrites the imported copy; an import never overwrites a
-crawled row (see the `WHERE ... ? 'v1_import'` on every upsert).
-
-Supported files:
-  forum-log     v1 Scrapy log (logs/spider.log); every scraped post was logged as a Python dict
-  youtube-json  mongoexport of raw YouTube API commentThreads (includes replies and authors)
-  youtube-csv   flattened comment CSVs (include video titles and channel names)
+Imported rows are marked with extra->'v1_import' and never overwrite crawled rows.
 """
 import ast
 import csv
@@ -35,18 +23,14 @@ KINDS = {
 }
 
 LOG_LINE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ ")
-MAX_ITEM_LINES = 5000  # give up on a malformed multi-line item after this many lines
+MAX_ITEM_LINES = 5000
+NUL_ESCAPE = re.compile(r"(?<!\\)((?:\\\\)*)\\u0000")
 
-# The two v1 CSV exports used different column names.
 CSV_COLUMNS = {
     "commentId": "comment_id", "channelId": "channel_id", "channelName": "channel_name",
     "videoId": "video_id", "videoTitle": "video_title", "textOriginal": "text",
     "likeCount": "like_count", "publishedAt": "published_at", "updatedAt": "updated_at",
 }
-
-
-# --------------------------------------------------------------------------- readers
-# Each yields (url, body_dict, fetched_at) for one raw row.
 
 
 def _forum_log_items(path: Path):
@@ -55,7 +39,7 @@ def _forum_log_items(path: Path):
     with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             m = LOG_LINE.match(line)
-            if m:  # a new log line always ends any item being collected
+            if m:
                 timestamp, buf = m.group(1), None
                 continue
             if buf is None:
@@ -125,12 +109,10 @@ def _youtube_csv_rows(path: Path):
 READERS = {"forum-log": _forum_log_items, "youtube-json": _youtube_threads, "youtube-csv": _youtube_csv_rows}
 
 
-# --------------------------------------------------------------------------- load
-
-
 def _json_text(obj) -> str:
-    # Postgres jsonb can't store the NUL character.
-    return json.dumps(obj, ensure_ascii=False).replace("\\u0000", "")
+    # jsonb can't store NUL. The regex skips a literal backslash-u0000 typed in a comment.
+    text = json.dumps(obj, ensure_ascii=False)
+    return NUL_ESCAPE.sub(r"\1", text) if "\\u0000" in text else text
 
 
 def load(conn, what: str, path: str) -> int | None:
@@ -160,8 +142,6 @@ def load(conn, what: str, path: str) -> int | None:
     return n
 
 
-# --------------------------------------------------------------------------- parse
-
 def parse_forum(conn) -> None:
     """raw v1_forum_item rows -> threads/posts (realm forums and other denied categories skipped)."""
     src = source_id(conn, "blizzard_forums")
@@ -178,7 +158,7 @@ def parse_forum(conn) -> None:
             WHERE source_id = %(src)s AND kind = 'v1_forum_item' AND parsed_at IS NULL
               AND body->>'thread_id' IS NOT NULL
               AND NOT (coalesce(body->>'forum_name', '') = ANY(%(denied)s))
-            ORDER BY body->>'post_id', id DESC   -- latest copy of each post wins
+            ORDER BY body->>'post_id', id DESC
             """,
             {"src": src, "denied": denied},
         )
@@ -257,7 +237,6 @@ def parse_youtube(conn) -> None:
         conn.execute(
             """
             CREATE TEMP TABLE yt_all ON COMMIT DROP AS
-            -- top-level comments from the API export
             SELECT c->>'id' AS comment_id, NULL::text AS parent_comment,
                    s->>'videoId' AS video_id, s->>'channelId' AS channel_id,
                    NULL::text AS channel_name, NULL::text AS video_title,
@@ -270,7 +249,6 @@ def parse_youtube(conn) -> None:
                  LATERAL (SELECT tc.c->'snippet' AS s) sn
             WHERE r.source_id = %(src)s AND r.kind = 'v1_yt_thread'
             UNION ALL
-            -- replies from the API export
             SELECT rc->>'id', rc->'snippet'->>'parentId',
                    rc->'snippet'->>'videoId', rc->'snippet'->>'channelId', NULL, NULL,
                    rc->'snippet'->>'authorDisplayName', rc->'snippet'->'authorChannelId'->>'value',
@@ -280,7 +258,6 @@ def parse_youtube(conn) -> None:
             FROM raw_pages r, jsonb_array_elements(coalesce(r.body->'replies'->'comments', '[]')) AS rc
             WHERE r.source_id = %(src)s AND r.kind = 'v1_yt_thread'
             UNION ALL
-            -- CSV exports
             SELECT body->>'comment_id', NULL, body->>'video_id', body->>'channel_id',
                    body->>'channel_name', body->>'video_title', NULL, NULL,
                    body->>'text', NULLIF(body->>'like_count', '')::numeric::int, NULL,
