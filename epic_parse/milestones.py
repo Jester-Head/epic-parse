@@ -1,21 +1,4 @@
-"""Dates people reached Mythic+ milestones, and the dates of their best runs.
-
-Raider.IO only has a character's score as it is now (plus final scores of past seasons), so weekly
-history can't be rebuilt for someone tracked late. Two dated sources fill part of that gap:
-
-- Blizzard achievements: the moment an account earned each season's Keystone Explorer, Conqueror,
-  Master, Hero, Legend and Myth (`character_milestones`). Achievements are account-wide, so the
-  date is when the account first earned it, possibly on another character.
-- Raider.IO best runs: each dungeon's best run with its completion date (`character_best_runs`).
-  Only runs that are still a character's best are visible, so early weeks are under-represented;
-  every best run ever seen is kept, so weekly snapshots build an upgrade history over time.
-
-refresh_achievement_map(): Blizzard achievement id -> (milestone, Raider.IO season), from the
-                           Game Data API achievement index.
-milestones_from_achievements(): character_milestones from one character's compacted achievements.
-store_best_runs(): character_best_runs from one Raider.IO profile response.
-backfill(): fill both tables from responses already stored in raw_pages.
-"""
+"""Dates people reached Mythic+ milestones (Blizzard achievements) and their best runs (Raider.IO)."""
 import logging
 import re
 from urllib.parse import unquote, urlsplit
@@ -31,7 +14,7 @@ EXPANSION_SLUGS = {"Battle for Azeroth": "bfa", "Shadowlands": "sl", "Dragonflig
 SEASON_NUMBERS = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5}
 SEASONAL = re.compile(r"^(?P<exp>Battle for Azeroth|Shadowlands|Dragonflight|The War Within|Midnight) "
                       r"Keystone (?P<m>Explorer|Conqueror|Master|Hero|Legend|Myth): Season (?P<n>\w+)$")
-LEGION = {"Keystone Master", "Keystone Conqueror"}  # expansion-wide, not per season
+LEGION = {"Keystone Master", "Keystone Conqueror"}
 
 
 def _season_slug(expansion: str, number: str) -> str | None:
@@ -111,11 +94,10 @@ def backfill(conn, token) -> None:
     refresh_achievement_map(conn, token)
     ids = milestone_ids(conn)
 
-    # Blizzard achievements: raw pages are keyed by URL (.../character/<realm>/<name>/achievements).
     chars = {(realm, name.lower()): cid for cid, realm, name in
              conn.execute("SELECT id, realm, name FROM characters WHERE region = 'us'")}
     src = source_id(conn, "blizzard_api")
-    rows = conn.execute(  # keep only the milestone pairs in the database; full lists are ~1,700 entries each
+    rows = conn.execute(
         """SELECT DISTINCT ON (r.url) r.url, r.fetched_at,
                   (SELECT coalesce(jsonb_agg(e), '[]') FROM jsonb_array_elements(r.body->'completed') e
                    WHERE (e->>0)::int = ANY(%(ids)s))
@@ -133,7 +115,6 @@ def backfill(conn, token) -> None:
                 pages += 1
     log.info("Milestones backfilled: %s from %s characters' achievements", f"{stored:,}", f"{pages:,}")
 
-    # Raider.IO best runs from stored snapshots (each snapshot row knows its character and season).
     n = 0
     with conn.transaction():
         for char_id, season, body in conn.execute(

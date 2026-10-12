@@ -1,8 +1,4 @@
-"""Blizzard WoW forums (us.forums.blizzard.com), a Discourse site with a public JSON API.
-
-fetch(): categories.json -> category topic lists -> each changed topic's JSON -> its posts.
-parse(): raw 'topic' / 'posts' pages -> threads and posts rows.
-"""
+"""Crawl the Blizzard WoW forums and parse topics into threads and posts."""
 import logging
 import re
 
@@ -19,11 +15,9 @@ log = logging.getLogger(__name__)
 SOURCE = "blizzard_forums"
 BASE = "https://us.forums.blizzard.com/en/wow"
 
-# Top-level categories crawled when none are given (their subcategories are included).
 DEFAULT_CATEGORIES = ["gameplay", "classes", "pvp", "lore", "in-development", "community", "wow-classic", "wow-forever"]
 
-# Skipped wherever they appear, as a category or a subcategory (along with their
-# subcategories). All realm forums, retail and Classic, are skipped too; see _is_realm().
+# Skipped along with their subcategories, as are realm forums (_is_realm).
 DENY_CATEGORY_NAMES = {
     "Off-Topic",
     "Support",
@@ -36,11 +30,8 @@ DENY_CATEGORY_NAMES = {
 
 POSTS_PER_REQUEST = 20
 
-# Leftovers inside quotes of very old posts, e.g. "10/28/2018 09:08 PMPosted by Snowfox"
+# Leftovers inside quotes of very old posts, e.g. "10/28/2018 09:08 PMPosted by Name"
 OLD_POST_HEADER = re.compile(r"\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2} [AP]M\s*Posted by \w+\s*")
-
-
-# --------------------------------------------------------------------------- fetch
 
 
 def _is_realm(category: dict) -> bool:
@@ -138,7 +129,7 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
                         return
                     try:
                         requests = _fetch_topic(conn, fetcher, src, t["id"])
-                    except Exception as e:  # one bad thread shouldn't stop the crawl; it's retried next run
+                    except Exception as e:
                         log.warning("Topic %d failed, skipping: %s", t["id"], e)
                         continue
                     fetched += 1
@@ -149,9 +140,6 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
         log.info("Done: %d topics fetched", fetched)
     finally:
         fetcher.close()
-
-
-# --------------------------------------------------------------------------- parse
 
 
 def clean_text(text: str | None) -> str:
@@ -316,7 +304,6 @@ def parse(conn, batch_size: int = 200) -> None:
                 conn.execute("UPDATE raw_pages SET parsed_at = now() WHERE id = %s", (raw_id,))
             pages += len(batch)
 
-    # Link replies to the post they answer (needs both posts present, so done last).
     with conn.transaction():
         linked = conn.execute(
             """

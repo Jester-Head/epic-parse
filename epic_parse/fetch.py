@@ -8,7 +8,6 @@ from psycopg.types.json import Jsonb
 
 log = logging.getLogger(__name__)
 
-# Sent with every request; set HTTP_USER_AGENT in .env to identify the project to the sites it fetches.
 DEFAULT_USER_AGENT = "EpicParse/0.2"
 
 
@@ -51,7 +50,10 @@ class Fetcher:
                 time.sleep(5 * attempt)
                 continue
             if resp.status_code == 429 or resp.status_code >= 500:
-                wait = int(resp.headers.get("Retry-After", 10 * attempt))
+                try:
+                    wait = int(resp.headers.get("Retry-After", 10 * attempt))
+                except ValueError:  # an HTTP date instead of seconds
+                    wait = 10 * attempt
                 log.warning("HTTP %d on %s, waiting %ds (attempt %d)", resp.status_code, url, wait, attempt)
                 time.sleep(wait)
                 continue

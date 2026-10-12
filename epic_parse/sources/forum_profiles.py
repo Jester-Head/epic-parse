@@ -1,15 +1,4 @@
-"""Public profiles of Blizzard forum accounts (us.forums.blizzard.com/en/wow/u/<username>.json).
-
-Each profile lists the account's characters ("aliases": every character on the poster's
-Battle.net account that they can post as), with realm, class, race, level, achievement
-points and a Classic flag. Blizzard links these, so they are verified alts, unlike names
-people type into their "About me". The profile also has account stats (created, last post,
-post count, time read) and the "About me" text when filled in.
-
-fetch(): one profile per forum account that posted in a crawled thread, most recent posters
-         first; accounts fetched within `refresh_days` are skipped. Applied as it goes.
-parse(): re-applies stored profiles (e.g. after changing _apply).
-"""
+"""Public forum account profiles, including every character on the account."""
 import logging
 import re
 from urllib.parse import quote
@@ -24,7 +13,6 @@ log = logging.getLogger(__name__)
 
 REGION = "us"
 
-# Forum accounts behind crawled posts (v1-imported authors are character names, not accounts).
 ACCOUNTS_SQL = """
     SELECT author, max(created_at) AS last_post
     FROM posts
@@ -130,7 +118,7 @@ def fetch(conn, limit: int | None = None, delay: float = 1.5, refresh_days: int 
                 status = fetcher.last_status
                 n = _apply(conn, username, raw_id, status, body)
                 conn.execute("UPDATE raw_pages SET parsed_at = now() WHERE id = %s", (raw_id,))
-            except Exception as e:  # one bad account shouldn't stop the run
+            except Exception as e:
                 log.warning("Profile fetch failed for %s, skipped from now on (--retry-failed): %s", username, e)
                 conn.execute(
                     """INSERT INTO forum_accounts (username, failures) VALUES (%s, 1)
