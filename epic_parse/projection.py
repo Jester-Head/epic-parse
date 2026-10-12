@@ -1,4 +1,4 @@
-"""End-of-season projections of Mythic+ percentile lines (our own; Raider.IO's site projection
+"""End-of-season projections of Mythic+ percentile lines (my own; Raider.IO's site projection
 isn't in its public API).
 
 Idea: every line climbs through a season in a broadly similar shape. For each finished season we
