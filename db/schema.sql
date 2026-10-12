@@ -60,6 +60,8 @@ CREATE INDEX IF NOT EXISTS posts_thread ON posts (thread_id, position);
 CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at);
 CREATE INDEX IF NOT EXISTS posts_body_search ON posts USING gin (body_tsv);
 CREATE INDEX IF NOT EXISTS posts_extra ON posts USING gin (extra jsonb_path_ops);
+-- Without it, deleting a post scans the whole table for replies to it (the parent_id foreign key).
+CREATE INDEX IF NOT EXISTS posts_parent ON posts (parent_id) WHERE parent_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS imports (
     id          bigserial PRIMARY KEY,
