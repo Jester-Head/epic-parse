@@ -175,7 +175,7 @@ RETURNS numeric LANGUAGE sql STABLE AS $$
     END, 3)
 $$;
 
--- The reverse of mplus_percentile: the score needed to be in the top p_pct percent.
+-- The score needed to be in the top p_pct percent of a season.
 CREATE OR REPLACE FUNCTION mplus_score_at(p_season text, p_pct numeric, p_at timestamptz DEFAULT NULL)
 RETURNS numeric LANGUAGE sql STABLE AS $$
     WITH pts AS (
@@ -211,8 +211,8 @@ CREATE TABLE IF NOT EXISTS mplus_line_progress (
     PRIMARY KEY (season, percentile, day)
 );
 
--- Projected end-of-season value of a percentile line: its value on p_at divided by the median
--- share of their final value that other finished seasons had reached by that day.
+-- Projects a line's final value as its value on p_at divided by the median share of the final value
+-- that other finished seasons had reached by that day.
 CREATE OR REPLACE FUNCTION mplus_cutoff_projection(p_season text, p_percentile numeric, p_at timestamptz DEFAULT now())
 RETURNS TABLE (day int, current_score numeric, projected numeric, low numeric, high numeric, seasons_used int)
 LANGUAGE sql STABLE AS $$

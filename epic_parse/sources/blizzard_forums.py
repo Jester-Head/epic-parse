@@ -1,4 +1,4 @@
-"""Blizzard WoW forums (a Discourse site): crawl topics, then parse them into threads and posts."""
+"""Crawl the Blizzard WoW forums and parse topics into threads and posts."""
 import logging
 import re
 

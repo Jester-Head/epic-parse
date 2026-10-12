@@ -1,4 +1,4 @@
-"""Rebuild people and player_seasons: one row per person, joined across their characters."""
+"""Rebuild the one-row-per-person tables, people and player_seasons."""
 import logging
 
 log = logging.getLogger(__name__)

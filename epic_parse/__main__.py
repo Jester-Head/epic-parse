@@ -1,4 +1,4 @@
-"""Command line entry point: `python -m epic_parse <command>` (see --help)."""
+"""Command line entry point for `python -m epic_parse <command>` (see --help)."""
 import argparse
 import importlib
 import logging

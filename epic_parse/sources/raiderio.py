@@ -1,4 +1,4 @@
-"""Raider.IO: Mythic+ scores, raid progress and weekly snapshots for characters that posted."""
+"""Fetch Mythic+ scores, raid progress and weekly snapshots from Raider.IO for characters that posted."""
 import json
 import logging
 import os

@@ -1,4 +1,4 @@
-"""Blizzard's WoW Profile API: PvP, achievements, collections and stats for forum posters' characters.
+"""Fetch PvP, achievements, collections and stats for forum posters' characters from Blizzard's API.
 
 Blizzard's API terms allow keeping its data for at most 30 days. purge_expired() enforces that
 after every fetch and before every weekly snapshot.
