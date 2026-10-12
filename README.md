@@ -1,11 +1,11 @@
 # Epic Parse
 
-This started a long time ago as a joke about simulating Barrens chat.
-I’ve played World of Warcraft basically since it launched in 2004, and for a long time, the community has felt unheard.
-“Blizzard doesn’t play their own game” is something I’m guilty of saying myself. So I wanted to see if I could
-simulate having conversations with WoW players. My project gathers comments
-from the WoW community, then uses them to build AI personas that respond to new features like different types of
-players would. The personas are types of players, not copies of anyone, and no usernames are used.
+This started years ago as a fun idea to simulate the Barrens chat. Over time, it grew into something bigger.
+What if the chat could talk about upcoming features the way different kinds of players would?
+
+Epic Parse gathers comments and turns them into AI personas, such as raider, casual, Classic Andy (someone deeply
+committed to classic WoW), and more. You can talk with these personalities or show them a new feature, and they'll
+respond in character.
 
 ## Status
 
