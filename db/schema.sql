@@ -264,19 +264,25 @@ INSERT INTO season_rules (season, rating_system, affix_split, ksm_requirement, k
     ('season-bfa-3', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
     ('season-bfa-4', 'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
     ('season-sl-1',  'raiderio_score_only', NULL, 'all dungeons at +15 in time', NULL, 'wiki: Mythic+ Rating'),
-    ('season-sl-2',  'blizzard_rating', NULL, 'rating 2000', NULL, 'wiki: Mythic+ Rating (introduced 9.1.0, 2021-06-29)'),
-    ('season-sl-3',  'blizzard_rating', NULL, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
-    ('season-sl-4',  'blizzard_rating', NULL, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
-    ('season-df-1',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating (Fortified/Tyrannical split, DF S1-3)'),
+    ('season-sl-2',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating (introduced 9.1.0, 2021-06-29; Fortified/Tyrannical split until The War Within)'),
+    ('season-sl-3',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-sl-4',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
+    ('season-df-1',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
     ('season-df-2',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
     ('season-df-3',  'blizzard_rating', true, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
-    ('season-df-4',  'blizzard_rating', NULL, 'rating 2000', 'key levels squished (mapping not yet recorded)', 'wiki: Mythic+ Rating'),
+    ('season-df-4',  'blizzard_rating', true, 'rating 2000', 'key levels squished (mapping not yet recorded)', 'wiki: Mythic+ Rating'),
     ('season-tww-1', 'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating (single score from TWW)'),
     ('season-tww-2', 'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
     ('season-tww-3', 'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
     ('season-mn-1',  'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating'),
     ('season-mn-2',  'blizzard_rating', false, 'rating 2000', NULL, 'wiki: Mythic+ Rating')
 ON CONFLICT (season) DO NOTHING;   -- never overwrite rows edited by hand
+-- How keystone difficulty changed when the season started. 'squish' means levels were renumbered lower,
+-- 'scaling' that the difficulty added per level changed, 'tuning' that enemies were retuned across all keys.
+ALTER TABLE season_rules ADD COLUMN IF NOT EXISTS key_change text NOT NULL DEFAULT 'none';
+UPDATE season_rules r SET key_change = v.key_change
+FROM (VALUES ('season-df-4', 'squish'), ('season-tww-2', 'scaling'), ('season-mn-1', 'tuning')) AS v(season, key_change)
+WHERE r.season = v.season AND r.key_change = 'none';
 
 CREATE TABLE IF NOT EXISTS players (
     id         bigserial PRIMARY KEY,
