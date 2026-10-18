@@ -9,6 +9,14 @@ from psycopg.types.json import Jsonb
 log = logging.getLogger(__name__)
 
 DEFAULT_USER_AGENT = "EpicParse/0.2"
+# Query parameters that hold credentials. They're dropped from the URL saved in raw_pages.
+SECRET_PARAMS = ("access_key", "access_token", "api_key", "client_secret")
+
+
+def _saved_url(url: httpx.URL) -> str:
+    for name in SECRET_PARAMS:
+        url = url.copy_remove_param(name)
+    return str(url)
 
 
 class Fetcher:
@@ -72,7 +80,7 @@ class Fetcher:
         with self.conn.transaction():
             raw_id = self.conn.execute(
                 "INSERT INTO raw_pages (source_id, kind, url, status, body) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                (self.source_id, kind, str(resp.url), resp.status_code, Jsonb(data) if data is not None else None),
+                (self.source_id, kind, _saved_url(resp.url), resp.status_code, Jsonb(data) if data is not None else None),
             ).fetchone()[0]
         if resp.status_code != 200:
             log.warning("HTTP %d on %s (saved as raw page %d)", resp.status_code, url, raw_id)
