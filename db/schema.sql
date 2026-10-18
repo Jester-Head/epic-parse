@@ -499,6 +499,27 @@ CREATE TABLE IF NOT EXISTS character_best_runs (
 );
 CREATE INDEX IF NOT EXISTS character_best_runs_season ON character_best_runs (season, completed_at);
 
+-- The previous week's highest runs of each snapshotted character, timed or not.
+CREATE TABLE IF NOT EXISTS character_weekly_runs (
+    character_id    bigint,
+    keystone_run_id bigint,
+    season          text,
+    dungeon         text,
+    mythic_level    int,
+    score           numeric,
+    completed_at    timestamptz,
+    clear_time_ms   bigint,
+    par_time_ms     bigint,
+    upgrades        int,                  -- keystone levels gained (0 = depleted)
+    spec            text,
+    role            text,
+    first_seen      timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (character_id, keystone_run_id)
+);
+CREATE INDEX IF NOT EXISTS character_weekly_runs_season ON character_weekly_runs (season, completed_at);
+-- Raider.IO lists at most 10 runs a week, so 10 means "10 or more". NULL = not requested.
+ALTER TABLE character_snapshots ADD COLUMN IF NOT EXISTS prev_week_runs int;
+
 ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS milestone_dates jsonb;   -- {"Keystone Master": "2026-09-02T...", ...}
 ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS last_best_run_at timestamptz;
 

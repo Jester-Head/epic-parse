@@ -1,9 +1,10 @@
-"""Dates people reached Mythic+ milestones (Blizzard achievements) and their best runs (Raider.IO)."""
+"""Dates people reached Mythic+ milestones (Blizzard achievements) and their best and weekly runs (Raider.IO)."""
 import logging
 import re
 from urllib.parse import unquote, urlsplit
 
 import httpx
+from psycopg import sql
 
 from epic_parse.db import source_id
 
@@ -70,23 +71,32 @@ def milestones_from_achievements(conn, char_id: int, completed: list, ids: set[i
     return len(rows)
 
 
-def store_best_runs(conn, char_id: int, season: str | None, body: dict | None) -> int:
-    """Keep every best run seen for a character (one per dungeon per lookup; upgrades add rows)."""
-    runs = (body or {}).get("mythic_plus_best_runs") or []
+def _store_runs(conn, table: str, char_id: int, season: str | None, runs: list) -> int:
     if not season or not runs:
         return 0
     with conn.cursor() as cur:
         cur.executemany(
-            """INSERT INTO character_best_runs (character_id, keystone_run_id, season, dungeon, mythic_level, score,
-                                                completed_at, clear_time_ms, par_time_ms, upgrades, spec, role)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-               ON CONFLICT (character_id, keystone_run_id) DO NOTHING""",
+            sql.SQL("""INSERT INTO {} (character_id, keystone_run_id, season, dungeon, mythic_level, score,
+                                       completed_at, clear_time_ms, par_time_ms, upgrades, spec, role)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (character_id, keystone_run_id) DO NOTHING""").format(sql.Identifier(table)),
             [(char_id, r.get("keystone_run_id"), season, r.get("short_name"), r.get("mythic_level"), r.get("score"),
               r.get("completed_at"), r.get("clear_time_ms"), r.get("par_time_ms"), r.get("num_keystone_upgrades"),
               (r.get("spec") or {}).get("name"), r.get("role"))
              for r in runs if r.get("keystone_run_id")],
         )
     return len(runs)
+
+
+def store_best_runs(conn, char_id: int, season: str | None, body: dict | None) -> int:
+    """Keep every best run seen for a character (one per dungeon per lookup; upgrades add rows)."""
+    return _store_runs(conn, "character_best_runs", char_id, season, (body or {}).get("mythic_plus_best_runs") or [])
+
+
+def store_weekly_runs(conn, char_id: int, season: str | None, body: dict | None) -> int:
+    """Keep the previous week's highest runs Raider.IO lists for a character."""
+    runs = (body or {}).get("mythic_plus_previous_weekly_highest_level_runs") or []
+    return _store_runs(conn, "character_weekly_runs", char_id, season, runs)
 
 
 def backfill(conn, token) -> None:

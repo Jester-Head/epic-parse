@@ -385,7 +385,8 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                 raw_id, body = fetcher.get_json(
                     f"{BASE}/characters/profile", "snapshot",
                     params=_params(region=REGION, realm=realm, name=name,
-                                   fields=f"mythic_plus_scores_by_season:{season},gear,mythic_plus_best_runs:all"),
+                                   fields=f"mythic_plus_scores_by_season:{season},gear,mythic_plus_best_runs:all,"
+                                          "mythic_plus_previous_weekly_highest_level_runs"),
                 )
             except Exception as e:
                 log.warning("Snapshot failed for %s-%s, skipped from now on (fetch --retry-failed): %s", name, realm, e)
@@ -396,14 +397,18 @@ def snapshot(conn, limit: int | None = None, delay: float = 1.2, **_) -> None:
                 continue
             score = next((x.get("scores", {}).get("all") for x in body.get("mythic_plus_scores_by_season", [])
                           if x.get("season") == season), None)
+            weekly = body.get("mythic_plus_previous_weekly_highest_level_runs")
             conn.execute(
-                """INSERT INTO character_snapshots (character_id, season, score, item_level, runs, spec, raw_page_id)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                """INSERT INTO character_snapshots (character_id, season, score, item_level, runs, spec, raw_page_id,
+                                                    prev_week_runs)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                 (char_id, season, score, (body.get("gear") or {}).get("item_level_equipped"),
-                 len(body.get("mythic_plus_best_runs") or []), body.get("active_spec_name"), raw_id),
+                 len(body.get("mythic_plus_best_runs") or []), body.get("active_spec_name"), raw_id,
+                 len(weekly) if weekly is not None else None),
             )
             _mark_found_from_snapshot(conn, char_id, season, score, body)
             milestones.store_best_runs(conn, char_id, season, body)
+            milestones.store_weekly_runs(conn, char_id, season, body)
             taken += 1
             if i % 100 == 0:
                 log.info("  %d/%d", i, len(targets))
