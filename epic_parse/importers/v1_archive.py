@@ -240,7 +240,7 @@ def parse_youtube(conn) -> None:
             SELECT c->>'id' AS comment_id, NULL::text AS parent_comment,
                    s->>'videoId' AS video_id, s->>'channelId' AS channel_id,
                    NULL::text AS channel_name, NULL::text AS video_title,
-                   s->>'authorDisplayName' AS author, s->'authorChannelId'->>'value' AS author_channel_id,
+                   s->>'authorDisplayName' AS author,
                    s->>'textOriginal' AS text, (s->>'likeCount')::int AS likes,
                    (r.body->'snippet'->>'totalReplyCount')::int AS reply_count,
                    (s->>'publishedAt')::timestamptz AS published_at, (s->>'updatedAt')::timestamptz AS updated_at,
@@ -251,7 +251,7 @@ def parse_youtube(conn) -> None:
             UNION ALL
             SELECT rc->>'id', rc->'snippet'->>'parentId',
                    rc->'snippet'->>'videoId', rc->'snippet'->>'channelId', NULL, NULL,
-                   rc->'snippet'->>'authorDisplayName', rc->'snippet'->'authorChannelId'->>'value',
+                   rc->'snippet'->>'authorDisplayName',
                    rc->'snippet'->>'textOriginal', (rc->'snippet'->>'likeCount')::int, NULL,
                    (rc->'snippet'->>'publishedAt')::timestamptz, (rc->'snippet'->>'updatedAt')::timestamptz,
                    r.id, r.fetched_at
@@ -259,7 +259,7 @@ def parse_youtube(conn) -> None:
             WHERE r.source_id = %(src)s AND r.kind = 'v1_yt_thread'
             UNION ALL
             SELECT body->>'comment_id', NULL, body->>'video_id', body->>'channel_id',
-                   body->>'channel_name', body->>'video_title', NULL, NULL,
+                   body->>'channel_name', body->>'video_title', NULL,
                    body->>'text', NULLIF(body->>'like_count', '')::numeric::int, NULL,
                    NULLIF(body->>'published_at', '')::timestamptz, NULLIF(body->>'updated_at', '')::timestamptz,
                    id, fetched_at
@@ -275,7 +275,7 @@ def parse_youtube(conn) -> None:
             SELECT DISTINCT ON (comment_id)
                    comment_id, video_id, text, likes, published_at, updated_at, raw_id,
                    max(parent_comment) OVER w AS parent_comment, max(author) OVER w AS author,
-                   max(author_channel_id) OVER w AS author_channel_id, max(reply_count) OVER w AS reply_count,
+                   max(reply_count) OVER w AS reply_count,
                    max(channel_id) OVER w AS channel_id, max(channel_name) OVER w AS channel_name,
                    max(video_title) OVER w AS video_title
             FROM yt_all
@@ -307,7 +307,7 @@ def parse_youtube(conn) -> None:
             SELECT %(src)s, y.comment_id, t.id, y.author, y.text, y.published_at, y.updated_at, y.raw_id,
                    jsonb_strip_nulls(jsonb_build_object(
                        'v1_import', true, 'likes', y.likes, 'reply_count', y.reply_count,
-                       'author_channel_id', y.author_channel_id, 'parent_comment', y.parent_comment))
+                       'parent_comment', y.parent_comment))
             FROM yt y JOIN threads t ON t.source_id = %(src)s AND t.source_key = y.video_id
             ON CONFLICT (source_id, source_key) DO UPDATE SET
                 thread_id = EXCLUDED.thread_id, author = EXCLUDED.author, body = EXCLUDED.body,
