@@ -521,7 +521,6 @@ CREATE INDEX IF NOT EXISTS character_weekly_runs_season ON character_weekly_runs
 ALTER TABLE character_snapshots ADD COLUMN IF NOT EXISTS prev_week_runs int;
 
 -- One row per item per auction house snapshot. Prices are copper per unit.
--- Blizzard's API terms allow keeping its data for at most 30 days (blizzard_api.purge_expired).
 CREATE TABLE IF NOT EXISTS auction_prices (
     namespace       text,
     connected_realm int,                  -- 0 = region-wide commodities

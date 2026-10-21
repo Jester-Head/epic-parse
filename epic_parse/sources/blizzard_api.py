@@ -224,10 +224,8 @@ def purge_expired(conn, days: int = MAX_AGE_DAYS) -> None:
             "DELETE FROM bnet_characters WHERE fetched_at < now() - make_interval(days => %(days)s)", params).rowcount
         ms = conn.execute(
             "DELETE FROM character_milestones WHERE fetched_at < now() - make_interval(days => %(days)s)", params).rowcount
-        prices = conn.execute(
-            "DELETE FROM auction_prices WHERE snapshot_at < now() - make_interval(days => %(days)s)", params).rowcount
-    log.info("Blizzard data purge: %s replaced and %s expired raw pages, %s characters, %s milestone dates, "
-             "%s auction prices", f"{replaced:,}", f"{old:,}", f"{chars:,}", f"{ms:,}", f"{prices:,}")
+    log.info("Blizzard data purge: %s replaced and %s expired raw pages, %s characters, %s milestone dates",
+             f"{replaced:,}", f"{old:,}", f"{chars:,}", f"{ms:,}")
 
 
 def parse(conn) -> None:
