@@ -11,7 +11,7 @@ from psycopg import sql as pgsql
 
 from epic_parse import db, milestones, people, projection, wow_patches
 from epic_parse.importers import v1_archive
-from epic_parse.sources import blizzard_api, blizzard_forums, forum_profiles, raiderio
+from epic_parse.sources import blizzard_api, blizzard_auctions, blizzard_forums, forum_profiles, raiderio
 
 SOURCES = {"blizzard": blizzard_forums, "bnet": blizzard_api, "profiles": forum_profiles, "raiderio": raiderio}
 
@@ -77,6 +77,15 @@ def main() -> None:
 
     sub.add_parser("milestones", help="map keystone achievements and backfill milestone dates and best runs")
 
+    p_ah = sub.add_parser("auctions", help="snapshot auction house prices from Blizzard's API")
+    p_ah.add_argument("--namespace", default=blizzard_auctions.RETAIL,
+                      help="API namespace (default %(default)s; Classic is dynamic-classic-us)")
+    p_ah.add_argument("--realm", action="append", dest="realms", metavar="SLUG",
+                      help="realm whose auction house to snapshot, e.g. area-52 (repeatable)")
+    p_ah.add_argument("--all-realms", action="store_true", help="every connected realm in the namespace")
+    p_ah.add_argument("--no-commodities", action="store_false", dest="commodities",
+                      help="skip the region-wide commodities auction house")
+
     sub.add_parser("people", help="rebuild people / player_seasons (one row per person) and summarize")
 
     for m in local_modules:
@@ -127,6 +136,9 @@ def main() -> None:
                 print(f"  {'line':<9}{'week':>5}{'seasons':>9}{'median err':>12}{'worst err':>11}{'in range':>10}")
                 for pct, week, n, med, worst, inside in projection.backtest(conn):
                     print(f"  top {100 - float(pct):<5g}{week:>5}{n:>9}{med:>11}%{worst:>10}%{inside:>9}%")
+        elif args.command == "auctions":
+            blizzard_auctions.fetch(conn, namespace=args.namespace, realms=args.realms, all_realms=args.all_realms,
+                                    commodities=args.commodities)
         elif args.command == "milestones":
             milestones.backfill(conn, blizzard_api.Token())
         elif args.command == "people":

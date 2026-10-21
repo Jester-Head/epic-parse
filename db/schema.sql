@@ -520,6 +520,24 @@ CREATE INDEX IF NOT EXISTS character_weekly_runs_season ON character_weekly_runs
 -- Raider.IO lists at most 10 runs a week, so 10 means "10 or more". NULL = not requested.
 ALTER TABLE character_snapshots ADD COLUMN IF NOT EXISTS prev_week_runs int;
 
+-- One row per item per auction house snapshot. Prices are copper per unit.
+-- Blizzard's API terms allow keeping its data for at most 30 days (blizzard_api.purge_expired).
+CREATE TABLE IF NOT EXISTS auction_prices (
+    namespace       text,
+    connected_realm int,                  -- 0 = region-wide commodities
+    house           int,                  -- 0 = the realm's only auction house; else 2 Alliance, 6 Horde, 7 Blackwater
+    snapshot_at     timestamptz,
+    item_id         int,
+    pet_species     int,                  -- 0 = not a battle pet
+    auctions        int,
+    quantity        bigint,
+    min_price       bigint,               -- NULL = only bids, no buyout
+    median_price    bigint,
+    PRIMARY KEY (namespace, connected_realm, house, snapshot_at, item_id, pet_species)
+);
+CREATE INDEX IF NOT EXISTS auction_prices_item ON auction_prices (item_id, snapshot_at);
+CREATE INDEX IF NOT EXISTS auction_prices_snapshot ON auction_prices USING brin (snapshot_at);
+
 ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS milestone_dates jsonb;   -- {"Keystone Master": "2026-09-02T...", ...}
 ALTER TABLE player_seasons ADD COLUMN IF NOT EXISTS last_best_run_at timestamptz;
 

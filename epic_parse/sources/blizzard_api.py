@@ -64,13 +64,14 @@ def _count(key: str):
     return lambda data: {"count": len(data.get(key) or [])}
 
 
-def _get(fetcher: Fetcher, token: Token, path: str, kind: str, transform=None) -> tuple[int, dict | None, int | None]:
-    """GET a Profile API path (or a full href), refreshing the token once on 401."""
+def _get(fetcher: Fetcher, token: Token, path: str, kind: str, transform=None,
+         params: dict = PROFILE) -> tuple[int, dict | None, int | None]:
+    """GET an API path (or a full href), refreshing the token once on 401."""
     url = path if path.startswith("http") else API + path
-    url = url.split("?", 1)[0]  # hrefs carry ?namespace=..., which PROFILE supplies
+    url = url.split("?", 1)[0]  # hrefs carry ?namespace=..., which params supplies
     for attempt in (1, 2):
         fetcher.client.headers["Authorization"] = f"Bearer {token.get(force=attempt == 2)}"
-        raw_id, data = fetcher.get_json(url, kind, params=PROFILE, transform=transform)
+        raw_id, data = fetcher.get_json(url, kind, params=params, transform=transform)
         if fetcher.last_status != 401:
             break
     return raw_id, data, fetcher.last_status
@@ -223,8 +224,10 @@ def purge_expired(conn, days: int = MAX_AGE_DAYS) -> None:
             "DELETE FROM bnet_characters WHERE fetched_at < now() - make_interval(days => %(days)s)", params).rowcount
         ms = conn.execute(
             "DELETE FROM character_milestones WHERE fetched_at < now() - make_interval(days => %(days)s)", params).rowcount
-    log.info("Blizzard data purge: %s replaced and %s expired raw pages, %s characters, %s milestone dates",
-             f"{replaced:,}", f"{old:,}", f"{chars:,}", f"{ms:,}")
+        prices = conn.execute(
+            "DELETE FROM auction_prices WHERE snapshot_at < now() - make_interval(days => %(days)s)", params).rowcount
+    log.info("Blizzard data purge: %s replaced and %s expired raw pages, %s characters, %s milestone dates, "
+             "%s auction prices", f"{replaced:,}", f"{old:,}", f"{chars:,}", f"{ms:,}", f"{prices:,}")
 
 
 def parse(conn) -> None:
