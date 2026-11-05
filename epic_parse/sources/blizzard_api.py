@@ -31,6 +31,10 @@ MAX_AGE_DAYS = 30  # Blizzard Developer API terms: keep data no longer than 30 d
 CHARACTER_KEY = "(regexp_match(url, '/profile/wow/character/[^/?]+/[^/?]+'))[1]"
 
 
+class AuthError(Exception):
+    """The API rejected our credentials, so no lookup in this run can succeed."""
+
+
 class Token:
     """Client-credentials access token shared by all workers."""
 
@@ -81,8 +85,12 @@ def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name
             milestone_ids: set[int] | None = None) -> bool:
     base = f"/profile/wow/character/{quote(realm)}/{quote(name.lower())}"
     raw_id, summary, status = _get(fetcher, token, base, "bnet_summary")
+    if status in (401, 403):
+        raise AuthError(f"HTTP {status} from the Blizzard API; check BLIZZARD_CLIENT_ID / BLIZZARD_CLIENT_SECRET")
+    if status != 404 and (status != 200 or not summary):
+        raise RuntimeError(f"HTTP {status} for the character summary")
     conn.execute("UPDATE characters SET bnet_failures = 0 WHERE id = %s", (char_id,))
-    if status != 200 or not summary:
+    if status == 404 or summary is None:
         conn.execute(
             """INSERT INTO bnet_characters (character_id, found, fetched_at, raw_page_id) VALUES (%s, false, now(), %s)
                ON CONFLICT (character_id) DO UPDATE SET found = false, level = NULL, last_login = NULL,
@@ -178,15 +186,21 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
     milestone_ids = milestones.milestone_ids(conn)
     progress = {"done": 0, "found": 0, "errors": 0}
     lock = threading.Lock()
+    auth_failed = threading.Event()
 
     def work(chunk):
         with connect() as wconn:
             wfetcher = Fetcher(wconn, src, delay=delay)
             try:
                 for char_id, realm, name in chunk:
+                    if auth_failed.is_set():
+                        return
                     failed = False
                     try:
                         ok = _lookup(wconn, wfetcher, token, char_id, realm, name, milestone_ids)
+                    except AuthError:
+                        auth_failed.set()
+                        raise
                     except Exception as e:
                         log.warning("Blizzard lookup failed for %s-%s, skipped from now on (--retry-failed): %s",
                                     name, realm, e)

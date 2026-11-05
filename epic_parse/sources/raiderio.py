@@ -135,6 +135,11 @@ def _store_curve(conn, season: str, cutoffs: dict) -> None:
             )
 
 
+# When the response was fetched, not now(): `parse raiderio` re-applies old pages and mustn't
+# push back the next lookup.
+LOOKED_UP_AT = "(SELECT fetched_at FROM raw_pages WHERE id = %(raw)s)"
+
+
 def _record_not_found(conn, char_id: int, raw_id: int) -> None:
     """Mark a failed lookup. 'Failed to find realm X' marks the whole realm unknown."""
     msg = conn.execute("SELECT body->>'message' FROM raw_pages WHERE id = %s", (raw_id,)).fetchone()[0] or ""
@@ -144,8 +149,12 @@ def _record_not_found(conn, char_id: int, raw_id: int) -> None:
                      (REGION, m.group(1)))
         conn.execute("UPDATE characters SET found = false WHERE region = %s AND realm = %s AND found IS NULL",
                      (REGION, m.group(1)))
-    conn.execute("UPDATE characters SET found = false, looked_up_at = now(), raw_page_id = %s, raiderio_failures = 0 "
-                 "WHERE id = %s AND found IS NOT TRUE", (raw_id, char_id))
+    conn.execute("UPDATE characters SET found = false, raw_page_id = %s WHERE id = %s AND found IS NOT TRUE",
+                 (raw_id, char_id))
+    # Also for characters found before (raw_page_id keeps their last good profile), or they'd be
+    # looked up again on every run.
+    conn.execute(f"UPDATE characters SET looked_up_at = {LOOKED_UP_AT}, raiderio_failures = 0 WHERE id = %(id)s",
+                 {"raw": raw_id, "id": char_id})
 
 
 def _apply_profile(conn, char_id: int, raw_id: int, status: int | None, body: dict | None) -> bool:
@@ -160,11 +169,13 @@ def _apply_profile(conn, char_id: int, raw_id: int, status: int | None, body: di
         for slug, p in (body.get("raid_progression") or {}).items()
     }
     conn.execute(
-        """UPDATE characters SET found = true, class = %s, spec = %s, race = %s, faction = %s,
-               mplus = %s::jsonb, raid = %s::jsonb, looked_up_at = now(), raw_page_id = %s, raiderio_failures = 0
-           WHERE id = %s""",
-        (body.get("class"), body.get("active_spec_name"), body.get("race"), body.get("faction"),
-         json.dumps(mplus), json.dumps(raid), raw_id, char_id),
+        f"""UPDATE characters SET found = true, class = %(class)s, spec = %(spec)s, race = %(race)s,
+               faction = %(faction)s, mplus = %(mplus)s::jsonb, raid = %(raid)s::jsonb, looked_up_at = {LOOKED_UP_AT},
+               raw_page_id = %(raw)s, raiderio_failures = 0
+           WHERE id = %(id)s""",
+        {"class": body.get("class"), "spec": body.get("active_spec_name"), "race": body.get("race"),
+         "faction": body.get("faction"), "mplus": json.dumps(mplus), "raid": json.dumps(raid), "raw": raw_id,
+         "id": char_id},
     )
     return True
 
