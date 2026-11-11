@@ -1,4 +1,4 @@
--- Epic-Parse schema. Safe to re-run: everything is CREATE ... IF NOT EXISTS.
+-- Epic-Parse schema. Safe to re-run, because everything is CREATE ... IF NOT EXISTS.
 
 CREATE TABLE IF NOT EXISTS sources (
     id   serial PRIMARY KEY,
@@ -48,13 +48,13 @@ CREATE TABLE IF NOT EXISTS posts (
     body        text,
     created_at  timestamptz,
     updated_at  timestamptz,
-    raw_page_id bigint,                    -- the raw_pages row this came from (not a foreign key: see below)
+    raw_page_id bigint,                    -- the raw_pages row this came from (not a foreign key, see below)
     extra       jsonb NOT NULL DEFAULT '{}',
     body_tsv    tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(body, ''))) STORED,
     UNIQUE (source_id, source_key)
 );
--- posts.raw_page_id is provenance only. As a foreign key, every insert had to lock its
--- raw_pages row, which is a disk write; at millions of rows that made bulk imports crawl.
+-- posts.raw_page_id is provenance only. As a foreign key, every insert locks its raw_pages
+-- row, which is a disk write. At millions of rows that makes bulk imports crawl.
 ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_raw_page_id_fkey;
 CREATE INDEX IF NOT EXISTS posts_thread ON posts (thread_id, position);
 CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at);
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS characters (
     region       text NOT NULL DEFAULT 'us',
     realm        text NOT NULL,
     name         text NOT NULL,
-    found        boolean,                 -- NULL until looked up; false = Raider.IO doesn't know it
+    found        boolean,                 -- NULL = not looked up yet, false = Raider.IO doesn't know it
     class        text,
     spec         text,
     race         text,
@@ -544,7 +544,7 @@ ALTER TABLE character_snapshots ADD COLUMN IF NOT EXISTS prev_week_runs int;
 CREATE TABLE IF NOT EXISTS auction_prices (
     namespace       text,
     connected_realm int,                  -- 0 = region-wide: commodities, or a Forever auction house
-    house           int,                  -- 0 = the only auction house; Classic Era 2 Alliance, 6 Horde, 7 Blackwater; Forever 110-125
+    house           int,                  -- 0 = the only auction house. Classic Era: 2 Alliance, 6 Horde, 7 Blackwater. Forever: 110-125
     snapshot_at     timestamptz,
     item_id         int,
     pet_species     int,                  -- 0 = not a battle pet

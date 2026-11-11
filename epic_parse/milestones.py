@@ -55,7 +55,7 @@ def milestone_ids(conn) -> set[int]:
 def milestones_from_achievements(conn, char_id: int, completed: list, ids: set[int], fetched_at=None) -> int:
     """Store the milestone achievements in a compacted [[id, ms timestamp], ...] list.
 
-    `fetched_at` is when Blizzard returned the list (default now); it decides when the row expires.
+    `fetched_at` is when Blizzard returned the list (default now). It decides when the row expires.
     """
     rows = [(char_id, a, ts) for a, ts in completed if a in ids]
     if rows:
@@ -89,7 +89,7 @@ def _store_runs(conn, table: str, char_id: int, season: str | None, runs: list) 
 
 
 def store_best_runs(conn, char_id: int, season: str | None, body: dict | None) -> int:
-    """Keep every best run seen for a character (one per dungeon per lookup; upgrades add rows)."""
+    """Keep every best run seen for a character. Each lookup has one per dungeon, and upgrades add rows."""
     return _store_runs(conn, "character_best_runs", char_id, season, (body or {}).get("mythic_plus_best_runs") or [])
 
 

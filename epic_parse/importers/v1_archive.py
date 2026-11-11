@@ -54,7 +54,7 @@ def _forum_log_items(path: Path):
             except (SyntaxError, ValueError):
                 if len(buf) > MAX_ITEM_LINES:
                     buf = None
-                continue  # a '}' inside a string; keep collecting
+                continue  # a '}' inside a string, so keep collecting
             buf = None
             if isinstance(item, dict) and "post_id" in item:
                 yield item.get("url") or "", item, timestamp
@@ -91,7 +91,7 @@ def _json_array(path: Path, chunk: int = 1 << 22):
 def _youtube_threads(path: Path):
     for obj in _json_array(path):
         oid = (obj.pop("_id", None) or {}).get("$oid")
-        # A MongoDB ObjectId starts with its creation time: the moment v1 stored this record.
+        # A MongoDB ObjectId starts with its creation time, which is when v1 stored this record.
         fetched = datetime.fromtimestamp(int(oid[:8], 16), timezone.utc) if oid else None
         video = obj.get("snippet", {}).get("videoId")
         yield f"https://www.youtube.com/watch?v={video}&lc={obj.get('id')}", obj, fetched
@@ -319,7 +319,7 @@ def parse_youtube(conn) -> None:
         ).rowcount
         log.info("  linking replies...")
         # Join through the temp table's plain columns so both sides use the
-        # (source_id, source_key) index; joining on extra->>'parent_comment' made
+        # (source_id, source_key) index. Joining on extra->>'parent_comment' makes
         # Postgres compare every reply with every post.
         linked = conn.execute(
             """

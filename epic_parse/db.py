@@ -30,10 +30,10 @@ def database_name() -> str:
 
 
 def connect(dbname: str | None = None) -> psycopg.Connection:
-    """Open a connection; host/user/password come from the environment.
+    """Open a connection. Host, user and password come from the environment.
 
-    Autocommit is on: each statement is saved immediately (so a crash mid-crawl
-    keeps everything fetched so far). Group statements with `conn.transaction()`
+    Autocommit is on, so each statement is saved immediately and a crash mid-crawl
+    keeps everything fetched so far. Group statements with `conn.transaction()`
     when they must succeed or fail together.
     """
     return psycopg.connect(dbname=dbname or database_name(), autocommit=True)
@@ -70,9 +70,9 @@ def source_id(conn: psycopg.Connection, name: str) -> int:
 
 @contextmanager
 def bulk_mode(conn: psycopg.Connection, enabled: bool = True):
-    """Use inside conn.transaction(): more memory for sorts, search indexes rebuilt at the end.
+    """Use inside conn.transaction(). Gives sorts more memory and rebuilds the search indexes at the end.
 
-    Dropping the indexes locks the posts table until the transaction commits; if the
+    Dropping the indexes locks the posts table until the transaction commits. If the
     transaction fails, the drop is rolled back along with everything else.
     """
     if not enabled:

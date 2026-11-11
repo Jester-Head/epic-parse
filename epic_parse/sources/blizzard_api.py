@@ -173,7 +173,7 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
           retry_failed: bool = False, **_) -> None:
     """Look up forum posters' characters on the Profile API, newest posters first.
 
-    About 8 requests per character; 4 workers x 0.5 s keeps the rate near 8/s, under the
+    A character takes about 8 requests. 4 workers x 0.5 s keeps the rate near 8/s, under the
     36,000/hour limit (10/s on average). Characters whose lookup failed after all retries are
     skipped unless `retry_failed`.
     """

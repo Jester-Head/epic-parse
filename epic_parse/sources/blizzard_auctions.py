@@ -146,8 +146,8 @@ def fetch(conn, namespace: str = RETAIL, realms: list[str] | None = None, all_re
           commodities: bool = True, delay: float = 0.2) -> None:
     """Snapshot the region's commodities and the given realms' auction houses.
 
-    Forever namespaces have no realms; every auction house there is snapshotted instead.
-    Blizzard updates each auction house about once an hour; a snapshot already stored is skipped.
+    Forever namespaces have no realms, so every auction house there is snapshotted instead.
+    Blizzard updates each auction house about once an hour. A snapshot already stored is skipped.
     """
     token = Token()
     fetcher = Fetcher(conn, source_id(conn, SOURCE), delay=delay)

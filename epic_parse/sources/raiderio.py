@@ -39,8 +39,8 @@ CANDIDATES_SQL = """
 def load_candidates(conn) -> int:
     """Put CANDIDATES_SQL's rows in a temp table `candidates` (with statistics) for this session.
 
-    Joining the subquery directly let Postgres badly misjudge its size; with a LIMIT it chose a
-    nested loop that re-scanned every post and could run for hours. Returns the row count.
+    Joined directly, the subquery makes Postgres badly misjudge its size. With a LIMIT it picks a
+    nested loop that re-scans every post and can run for hours. Returns the row count.
     """
     conn.execute("DROP TABLE IF EXISTS candidates")
     n = conn.execute(f"CREATE TEMP TABLE candidates AS {CANDIDATES_SQL}", {"since": SINCE}).rowcount
@@ -189,7 +189,7 @@ def fetch(conn, limit: int | None = None, refresh_days: int = 30, delay: float =
 
     Characters looked up within `refresh_days` are skipped. `limit` caps lookups per run.
     `workers` > 1 runs that many lookups in parallel (each with its own connection and
-    `delay`); Raider.IO can take seconds to answer for characters it hasn't cached.
+    `delay`), because Raider.IO can take seconds to answer for characters it hasn't cached.
     Characters whose lookup failed after all retries are skipped unless `retry_failed`.
     """
     src = source_id(conn, SOURCE)
@@ -287,13 +287,13 @@ def parse(conn) -> None:
 def link_forum_players(conn) -> int:
     """Each forum account becomes a player, linked to every character it has posted as.
 
-    Only crawled posts carry the account name separately from the character; v1-imported
+    Only crawled posts carry the account name separately from the character. v1-imported
     usernames were the character itself, so those can't be grouped.
     """
     with conn.transaction():
-        # One pass over posts to get each distinct (account, character); every join after
-        # this is on plain columns. (Joining posts to characters directly on computed
-        # expressions made Postgres compare every post with every character.)
+        # One pass over posts to get each distinct (account, character), so every join after
+        # this is on plain columns. Joining posts to characters directly on computed
+        # expressions makes Postgres compare every post with every character.
         conn.execute(
             """CREATE TEMP TABLE posters ON COMMIT DROP AS
                SELECT author, realm_slug(extra->>'realm') AS realm,
@@ -326,7 +326,7 @@ def link_forum_players(conn) -> int:
 
 
 def _mark_found_from_snapshot(conn, char_id: int, season: str, score, body: dict) -> None:
-    """A successful snapshot proves the character exists: fill in what the profile says.
+    """A successful snapshot proves the character exists, so fill in what the profile says.
 
     looked_up_at stays untouched, so the full lookup (all seasons, raids) still happens.
     """

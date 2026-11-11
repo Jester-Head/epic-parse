@@ -101,7 +101,7 @@ def fetch(conn, categories: list[str] | None = None, max_pages: int | None = Non
 
     max_pages:  topic-list pages per category (30 topics each), newest activity first
     max_topics: stop after fetching this many new/changed topics in total
-    since:      YYYY-MM-DD; skip topics last active before it and stop the category once a page has no newer ones
+    since:      YYYY-MM-DD. Skips topics last active before it and stops the category once a page has no newer ones
     """
     src = source_id(conn, SOURCE)
     fetcher = Fetcher(conn, src, delay=delay)
@@ -196,7 +196,7 @@ def latest_categories(conn, src: int) -> dict[int, dict]:
 def realm_from_username(username: str | None) -> str | None:
     """'Rozzezz-malganis' -> 'malganis'. Newer usernames end in an account number instead."""
     if username and "-" in username:
-        # Strip a trailing account number ("wyrmrest-accord-3387509"); short ones are
+        # Strip a trailing account number ("wyrmrest-accord-3387509"). Short numbers are
         # part of the realm name ("area-52").
         tail = re.sub(r"-\d{4,}$", "", username.split("-", 1)[1])
         if not tail.isdigit():

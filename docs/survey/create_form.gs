@@ -106,7 +106,7 @@ function build(form) {
   const mplusPage = form.addPageBreakItem().setTitle('Mythic+');
   form.addCheckboxItem().setTitle('4. Which role(s) do you play in Mythic+?')
     .setChoiceValues(['Tank', 'Healer', 'Damage']);
-  // One 1–5 scale per motivation rather than a grid: wide grids get cut off on phones.
+  // One 1–5 scale per motivation rather than a grid, because wide grids get cut off on phones.
   form.addSectionHeaderItem().setTitle('5. How important is each of the following to you when you play Mythic+?')
     .setHelpText('1 = not at all important, 5 = extremely important. Skip any that don\'t apply to you.');
   MOTIVATIONS.forEach(function (motivation) {
@@ -144,7 +144,7 @@ function build(form) {
 
   form.addPageBreakItem().setTitle('Your views');
   form.addSectionHeaderItem().setTitle('11. How much do you agree or disagree with each statement?');
-  // Separate questions rather than a grid: long statements get cut off in grid rows on phones.
+  // Separate questions rather than a grid, because long statements get cut off in grid rows on phones.
   [['11a', 'I enjoy the excitement of random loot drops.'],
    ['11b', 'I prefer rewards I can choose (Great Vault, crests, vendors).'],
    ['11c', 'Mythic+ is more fun with people I know.'],
