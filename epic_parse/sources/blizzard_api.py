@@ -32,7 +32,7 @@ CHARACTER_KEY = "(regexp_match(url, '/profile/wow/character/[^/?]+/[^/?]+'))[1]"
 
 
 class AuthError(Exception):
-    """The API rejected our credentials, so no lookup in this run can succeed."""
+    """The API rejected the credentials, so no lookup in this run can succeed."""
 
 
 class Token:

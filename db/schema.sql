@@ -286,7 +286,7 @@ WHERE r.season = v.season AND r.key_change = 'none';
 
 CREATE TABLE IF NOT EXISTS players (
     id         bigserial PRIMARY KEY,
-    key        text NOT NULL UNIQUE,      -- 'forum:<account username>', 'self:<label>' (told us their
+    key        text NOT NULL UNIQUE,      -- 'forum:<account username>', 'self:<label>' (self-reported
                                           -- characters, e.g. survey) or 'gold:<label>' (human-verified)
     notes      text,
     created_at timestamptz NOT NULL DEFAULT now()
