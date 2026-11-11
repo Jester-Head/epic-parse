@@ -56,7 +56,6 @@ try {
     & "$PgBin\pg_dump.exe" --format=custom --compress=zstd:3 --file=$partial $db
     if ($LASTEXITCODE -ne 0) { throw "pg_dump failed with exit code $LASTEXITCODE" }
 
-    # A dump that pg_restore can't list is not a backup.
     $entries = & "$PgBin\pg_restore.exe" --list $partial
     if ($LASTEXITCODE -ne 0 -or -not ($entries -match "TABLE DATA public posts")) { throw "Backup file failed verification" }
     Move-Item $partial $final

@@ -37,10 +37,9 @@ CANDIDATES_SQL = """
 
 
 def load_candidates(conn) -> int:
-    """Put CANDIDATES_SQL's rows in a temp table `candidates` (with statistics) for this session.
+    """Put CANDIDATES_SQL's rows in a temp table `candidates` for this session. Returns the row count.
 
-    Joined directly, the subquery makes Postgres badly misjudge its size. With a LIMIT it picks a
-    nested loop that re-scans every post and can run for hours. Returns the row count.
+    Keep the temp table and its statistics. Postgres plans the bare subquery badly.
     """
     conn.execute("DROP TABLE IF EXISTS candidates")
     n = conn.execute(f"CREATE TEMP TABLE candidates AS {CANDIDATES_SQL}", {"since": SINCE}).rowcount
@@ -135,8 +134,7 @@ def _store_curve(conn, season: str, cutoffs: dict) -> None:
             )
 
 
-# When the response was fetched, not now(): `parse raiderio` re-applies old pages and mustn't
-# push back the next lookup.
+# The fetch time, not now(), so re-applying old pages doesn't push back the next lookup.
 LOOKED_UP_AT = "(SELECT fetched_at FROM raw_pages WHERE id = %(raw)s)"
 
 
@@ -287,13 +285,10 @@ def parse(conn) -> None:
 def link_forum_players(conn) -> int:
     """Each forum account becomes a player, linked to every character it has posted as.
 
-    Only crawled posts carry the account name separately from the character. v1-imported
-    usernames were the character itself, so those can't be grouped.
+    v1-imported posts are left out, because their username is the character, not the account.
     """
     with conn.transaction():
-        # One pass over posts to get each distinct (account, character), so every join after
-        # this is on plain columns. Joining posts to characters directly on computed
-        # expressions makes Postgres compare every post with every character.
+        # One pass over posts for each distinct (account, character), so later joins use plain columns.
         conn.execute(
             """CREATE TEMP TABLE posters ON COMMIT DROP AS
                SELECT author, realm_slug(extra->>'realm') AS realm,

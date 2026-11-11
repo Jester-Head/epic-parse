@@ -53,8 +53,7 @@ CREATE TABLE IF NOT EXISTS posts (
     body_tsv    tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(body, ''))) STORED,
     UNIQUE (source_id, source_key)
 );
--- posts.raw_page_id is provenance only. As a foreign key, every insert locks its raw_pages
--- row, which is a disk write. At millions of rows that makes bulk imports crawl.
+-- posts.raw_page_id is deliberately not a foreign key. The lock per insert makes bulk imports crawl.
 ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_raw_page_id_fkey;
 CREATE INDEX IF NOT EXISTS posts_thread ON posts (thread_id, position);
 CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at);

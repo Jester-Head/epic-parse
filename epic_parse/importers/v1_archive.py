@@ -318,9 +318,7 @@ def parse_youtube(conn) -> None:
             {"src": src},
         ).rowcount
         log.info("  linking replies...")
-        # Join through the temp table's plain columns so both sides use the
-        # (source_id, source_key) index. Joining on extra->>'parent_comment' makes
-        # Postgres compare every reply with every post.
+        # Join on the temp table's plain columns so both sides use the (source_id, source_key) index.
         linked = conn.execute(
             """
             UPDATE posts c SET parent_id = p.id
