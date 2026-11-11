@@ -79,7 +79,8 @@ def main() -> None:
 
     p_ah = sub.add_parser("auctions", help="snapshot auction house prices from Blizzard's API")
     p_ah.add_argument("--namespace", default=blizzard_auctions.RETAIL,
-                      help="API namespace (default %(default)s; Classic is dynamic-classic-us)")
+                      help="API namespace (default %(default)s; Classic is dynamic-classic-us; "
+                           "Forever is dynamic-forever-us and ignores the realm options)")
     p_ah.add_argument("--realm", action="append", dest="realms", metavar="SLUG",
                       help="realm whose auction house to snapshot, e.g. area-52 (repeatable)")
     p_ah.add_argument("--all-realms", action="store_true", help="every connected realm in the namespace")

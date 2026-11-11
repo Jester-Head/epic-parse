@@ -523,8 +523,8 @@ ALTER TABLE character_snapshots ADD COLUMN IF NOT EXISTS prev_week_runs int;
 -- One row per item per auction house snapshot. Prices are copper per unit.
 CREATE TABLE IF NOT EXISTS auction_prices (
     namespace       text,
-    connected_realm int,                  -- 0 = region-wide commodities
-    house           int,                  -- 0 = the realm's only auction house; else 2 Alliance, 6 Horde, 7 Blackwater
+    connected_realm int,                  -- 0 = region-wide: commodities, or a Forever auction house
+    house           int,                  -- 0 = the only auction house; Classic Era 2 Alliance, 6 Horde, 7 Blackwater; Forever 110-125
     snapshot_at     timestamptz,
     item_id         int,
     pet_species     int,                  -- 0 = not a battle pet
