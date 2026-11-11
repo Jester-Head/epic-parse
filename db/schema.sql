@@ -359,6 +359,26 @@ CREATE TABLE IF NOT EXISTS bnet_characters (
     fetched_at             timestamptz,
     raw_page_id            bigint
 );
+-- One row per found character per fetch. blizzard_api.purge_expired leaves this table alone on
+-- purpose, so a character's progress can be followed over time.
+CREATE TABLE IF NOT EXISTS bnet_character_history (
+    character_id           bigint REFERENCES characters,
+    fetched_at             timestamptz,
+    level                  int,
+    last_login             timestamptz,
+    item_level             int,
+    achievement_points     int,
+    achievements_completed int,
+    guild                  text,
+    active_spec            text,
+    honor_level            int,
+    honorable_kills        int,
+    pvp                    jsonb,
+    mounts                 int,
+    pets                   int,
+    toys                   int,
+    PRIMARY KEY (character_id, fetched_at)
+);
 -- Must match blizzard_api.CHARACTER_KEY.
 CREATE INDEX IF NOT EXISTS raw_pages_bnet_character ON raw_pages
     (((regexp_match(url, '/profile/wow/character/[^/?]+/[^/?]+'))[1])) WHERE kind LIKE 'bnet%';

@@ -81,6 +81,10 @@ def _get(fetcher: Fetcher, token: Token, path: str, kind: str, transform=None,
     return raw_id, data, fetcher.last_status
 
 
+HISTORY_COLUMNS = """level, last_login, item_level, achievement_points, achievements_completed, guild, active_spec,
+                     honor_level, honorable_kills, pvp, mounts, pets, toys"""
+
+
 def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name: str,
             milestone_ids: set[int] | None = None) -> bool:
     base = f"/profile/wow/character/{quote(realm)}/{quote(name.lower())}"
@@ -102,6 +106,7 @@ def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name
         # The terms require deleting a character's data once Blizzard stops returning it. That
         # includes older responses, or `milestones` would rebuild the dates from them.
         conn.execute("DELETE FROM character_milestones WHERE character_id = %s", (char_id,))
+        conn.execute("DELETE FROM bnet_character_history WHERE character_id = %s", (char_id,))
         conn.execute(
             f"""DELETE FROM raw_pages
                WHERE kind LIKE 'bnet%%' AND id <> %(raw)s
@@ -149,6 +154,11 @@ def _lookup(conn, fetcher: Fetcher, token: Token, char_id: int, realm: str, name
          "honor": (pvp_summary or {}).get("honor_level"), "hks": (pvp_summary or {}).get("honorable_kills"),
          "pvp": json.dumps(pvp), "ach": len((ach or {}).get("completed", [])) if ach else None,
          "raw": raw_id, **counts},
+    )
+    conn.execute(
+        f"""INSERT INTO bnet_character_history (character_id, fetched_at, {HISTORY_COLUMNS})
+            SELECT character_id, fetched_at, {HISTORY_COLUMNS} FROM bnet_characters WHERE character_id = %s""",
+        (char_id,),
     )
     conn.execute(
         """UPDATE characters SET class = coalesce(class, %s), race = coalesce(race, %s), faction = coalesce(faction, %s),
